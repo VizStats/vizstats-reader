@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Courier_Prime, Geist, Geist_Mono, Inter } from "next/font/google";
 import "@mdxeditor/editor/style.css";
 import "@/styles/globals.css";
 import "@/styles/markdown-editor.css";
@@ -9,6 +9,14 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+
+// Screenplays only, so it is not preloaded on every page.
+const courierPrime = Courier_Prime({
+  preload: false,
+  style: ["normal", "italic"],
+  variable: "--font-screenplay",
+  weight: ["400", "700"],
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -71,6 +79,7 @@ export default function RootLayout({
         "antialiased",
         geistSans.variable,
         geistMono.variable,
+        courierPrime.variable,
         "font-sans",
         inter.variable,
       )}

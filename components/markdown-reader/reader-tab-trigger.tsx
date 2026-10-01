@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   AlertCircle,
+  Clapperboard,
   FileInput,
   FileSearch,
   FileText,
@@ -134,6 +135,16 @@ export function ReaderTabTrigger({
   const icon = tab.error ? (
     <AlertCircle
       className="size-3.5 shrink-0 text-destructive"
+      aria-hidden="true"
+    />
+  ) : tab.file?.kind === "screenplay" ? (
+    <Clapperboard
+      className={cn(
+        "size-3.5 shrink-0",
+        isActive
+          ? "text-[#03444A] dark:text-[#58D1E2]"
+          : "text-muted-foreground",
+      )}
       aria-hidden="true"
     />
   ) : tab.file?.kind === "pdf" ? (

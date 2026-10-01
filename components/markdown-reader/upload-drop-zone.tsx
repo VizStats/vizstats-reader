@@ -38,7 +38,7 @@ function UploadDropZone({
         </span>
         <h2 className="mt-5 text-xl font-semibold">Open a document</h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Drop a Markdown, Mermaid, or PDF document anywhere in this panel,
+          Drop a Markdown, Mermaid, Fountain, or PDF document anywhere in this panel,
           choose a file, or paste copied Markdown text.
         </p>
 
@@ -58,7 +58,7 @@ function UploadDropZone({
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {[".md", ".mmd", ".pdf", "PDFs up to 25 MB", "Local only"].map((label) => (
+          {[".md", ".mmd", ".fountain", ".pdf", "PDFs up to 25 MB", "Local only"].map((label) => (
             <Badge
               className="border-[#8EA8AC]/35 bg-background/70 text-muted-foreground"
               key={label}

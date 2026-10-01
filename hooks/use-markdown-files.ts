@@ -12,6 +12,7 @@ import {
   createLoadedReaderTab,
   getDownloadFileName,
   getPastedDocumentName,
+  isFountainFile,
   isMermaidFile,
   isPdfFile,
   isSupportedDocumentFile,
@@ -98,7 +99,7 @@ export function useMarkdownFiles({
     if (candidates.length === 0) {
       if (isSingleSelection) {
         updateTab(activeTab.id, {
-          error: "Choose a Markdown, Mermaid, or PDF document.",
+          error: "Choose a Markdown, Mermaid, Fountain, or PDF document.",
         });
       } else {
         notifySkipped({
@@ -159,17 +160,21 @@ export function useMarkdownFiles({
           }
 
           const text = await file.text();
-          const content = isMermaidFile(file) ? toMermaidMarkdown(text) : text;
+          const fileDetails = {
+            lastModified: file.lastModified,
+            name: file.name,
+            size: file.size,
+            source: "file",
+          } as const;
 
           results.push({
-            loaded: {
-              content,
-              kind: "markdown",
-              lastModified: file.lastModified,
-              name: file.name,
-              size: file.size,
-              source: "file",
-            } satisfies LoadedFile,
+            loaded: isFountainFile(file)
+              ? { ...fileDetails, content: text, kind: "screenplay" }
+              : {
+                  ...fileDetails,
+                  content: isMermaidFile(file) ? toMermaidMarkdown(text) : text,
+                  kind: "markdown",
+                },
             status: "ok",
           });
         } catch (error) {
@@ -336,12 +341,15 @@ export function useMarkdownFiles({
     }
 
     const blob = new Blob([file.content], {
-      type: "text/markdown;charset=utf-8",
+      type:
+        file.kind === "screenplay"
+          ? "text/plain;charset=utf-8"
+          : "text/markdown;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
-    anchor.download = getDownloadFileName(file.name);
+    anchor.download = getDownloadFileName(file.name, file.kind);
     anchor.href = url;
     anchor.rel = "noopener";
     document.body.append(anchor);
@@ -455,8 +463,12 @@ function getSingleFileError(
   file: File | undefined,
 ) {
   if (status === "too-large") {
-    return file && isPdfFile(file)
-      ? "This PDF is larger than 25 MB. Try a smaller document."
+    if (file && isPdfFile(file)) {
+      return "This PDF is larger than 25 MB. Try a smaller document.";
+    }
+
+    return file && isFountainFile(file)
+      ? "This screenplay is larger than 5 MB. Try a smaller file."
       : "This file is larger than 5 MB. Try a smaller Markdown file.";
   }
 

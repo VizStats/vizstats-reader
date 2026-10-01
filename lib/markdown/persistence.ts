@@ -392,6 +392,17 @@ function normalizeLoadedFile(value: unknown): LoadedFile | null {
     };
   }
 
+  if (value.kind === "screenplay") {
+    return {
+      content: value.content,
+      kind: "screenplay",
+      lastModified,
+      name: value.name,
+      size,
+      source: "file",
+    };
+  }
+
   return {
     content: value.content,
     kind: "markdown",

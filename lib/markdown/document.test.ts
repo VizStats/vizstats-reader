@@ -7,6 +7,8 @@ import {
   getDownloadFileName,
   getPastedDocumentName,
   getReaderTabLabel,
+  getReaderViewForValue,
+  isFountainFile,
   isMarkdownFile,
   isMermaidFile,
   isPdfFile,
@@ -202,6 +204,39 @@ describe("PDF document detection", () => {
   });
 });
 
+describe("Fountain document detection", () => {
+  it("accepts Fountain extensions, even with a plain-text MIME type", () => {
+    const file = new File([""], "Pilot.fountain", { type: "text/plain" });
+
+    expect(isFountainFile(file)).toBe(true);
+    expect(isFountainFile(new File([""], "pilot.SPMD"))).toBe(true);
+    expect(isSupportedDocumentFile(file)).toBe(true);
+  });
+
+  it("rejects other files", () => {
+    expect(isFountainFile(new File([""], "pilot.md"))).toBe(false);
+  });
+});
+
+describe("getReaderViewForValue", () => {
+  const screenplay: LoadedFile = {
+    content: "INT. HOUSE - DAY",
+    kind: "screenplay",
+    lastModified: 1,
+    name: "pilot.fountain",
+    size: 16,
+    source: "file",
+  };
+
+  it("offers Source for Markdown and screenplays, Original for PDFs", () => {
+    expect(getReaderViewForValue("source", screenplay)).toBe("source");
+    expect(getReaderViewForValue("source", pastedFile)).toBe("source");
+    expect(getReaderViewForValue("original", screenplay)).toBe("preview");
+    expect(getReaderViewForValue("source", null)).toBe("preview");
+    expect(getReaderViewForValue("anything", screenplay)).toBe("preview");
+  });
+});
+
 describe("createReaderTab and createLoadedReaderTab", () => {
   it("creates empty preview tabs with unique ids", () => {
     const first = createReaderTab();
@@ -272,6 +307,18 @@ describe("getDownloadFileName", () => {
     expect(getDownloadFileName("report.pdf")).toBe("report.md");
   });
 
+  it("downloads screenplays as Fountain", () => {
+    expect(getDownloadFileName("pilot.fountain", "screenplay")).toBe(
+      "pilot.fountain",
+    );
+    expect(getDownloadFileName("Pilot draft", "screenplay")).toBe(
+      "Pilot draft.fountain",
+    );
+    expect(getDownloadFileName("///", "screenplay")).toBe(
+      "screenplay.fountain",
+    );
+  });
+
   it("downloads Mermaid documents as the Markdown they hold", () => {
     expect(getDownloadFileName("flow.mmd")).toBe("flow.md");
     expect(getDownloadFileName("Flow.MERMAID")).toBe("Flow.md");
@@ -318,6 +365,12 @@ describe("normalizeDocumentName", () => {
     expect(normalizeDocumentName("Notes", "markdown")).toBe("Notes.md");
     expect(normalizeDocumentName("Research", "pdf")).toBe("Research.pdf");
     expect(normalizeDocumentName("Research.PDF", "pdf")).toBe("Research.PDF");
+    expect(normalizeDocumentName("Pilot", "screenplay")).toBe(
+      "Pilot.fountain",
+    );
+    expect(normalizeDocumentName("Pilot.spmd", "screenplay")).toBe(
+      "Pilot.spmd",
+    );
   });
 });
 

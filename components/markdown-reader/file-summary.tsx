@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, FileX, PanelLeftClose } from "lucide-react";
+import { Clapperboard, FileText, FileX, PanelLeftClose } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -27,7 +27,11 @@ export function FileSummary({
     <div className="flex flex-col gap-3">
       <div className="flex min-w-0 items-center gap-3">
         <div className="grid size-11 shrink-0 place-items-center rounded-md border bg-muted text-muted-foreground">
-          <FileText className="size-5" aria-hidden="true" />
+          {file.kind === "screenplay" ? (
+            <Clapperboard className="size-5" aria-hidden="true" />
+          ) : (
+            <FileText className="size-5" aria-hidden="true" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold" title={file.name}>
@@ -72,12 +76,19 @@ export function FileSummary({
         <Stat label="Words" value={stats.words.toLocaleString()} />
         <Separator orientation="vertical" />
         <Stat
-          label={file.kind === "pdf" ? "Pages" : "Lines"}
-          value={
+          label={
             file.kind === "pdf"
-              ? file.pageCount.toLocaleString()
-              : stats.lines.toLocaleString()
+              ? "Pages"
+              : file.kind === "screenplay"
+                ? "Scenes"
+                : "Lines"
           }
+          value={(file.kind === "pdf"
+            ? file.pageCount
+            : file.kind === "screenplay"
+              ? (stats.scenes ?? 0)
+              : stats.lines
+          ).toLocaleString()}
         />
         <Separator orientation="vertical" />
         <Stat label="Read" value={`${stats.readingMinutes}m`} />

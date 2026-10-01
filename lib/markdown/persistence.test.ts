@@ -212,6 +212,26 @@ describe("saveReaderSession and loadReaderSession", () => {
     expect(tabB?.view).toBe("preview");
   });
 
+  it("round-trips a screenplay in Source view", async () => {
+    const screenplay: LoadedFile = {
+      content: "INT. HOUSE - DAY\n\nHe waits.",
+      kind: "screenplay",
+      lastModified: 42,
+      name: "pilot.fountain",
+      size: 27,
+      source: "file",
+    };
+    const state: ReaderState = {
+      activeTabId: "script",
+      groups: [],
+      tabs: [createTab("script", screenplay)],
+    };
+
+    await saveReaderSession(state);
+
+    expect((await loadReaderSession())?.state).toEqual(state);
+  });
+
   it("round-trips an imported PDF and restores its original view", async () => {
     const pdfData = new Uint8Array([37, 80, 68, 70]).buffer;
     const pdfFile: LoadedFile = {

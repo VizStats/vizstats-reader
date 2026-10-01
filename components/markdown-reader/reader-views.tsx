@@ -15,6 +15,7 @@ import { EditableMarkdownPreview } from "@/components/markdown-reader/editable-m
 import { FileSummary } from "@/components/markdown-reader/file-summary";
 import { Outline } from "@/components/markdown-reader/outline";
 import { PdfOriginalView } from "@/components/markdown-reader/pdf-original-view";
+import { ScreenplayPreview } from "@/components/markdown-reader/screenplay-preview";
 import {
   EditPreviewButton,
   SourceView,
@@ -40,8 +41,11 @@ import {
   useReaderTabModel,
   type ReaderTabModel,
 } from "@/hooks/use-reader-tab-model";
-import { getReaderTabLabel } from "@/lib/markdown/document";
-import type { ReaderTab } from "@/lib/markdown/types";
+import {
+  getReaderTabLabel,
+  getReaderViewForValue,
+} from "@/lib/markdown/document";
+import type { LoadedFile, ReaderTab } from "@/lib/markdown/types";
 import { cn } from "@/lib/utils";
 
 type UpdateReaderTab = (tabId: string, updates: Partial<ReaderTab>) => void;
@@ -132,57 +136,76 @@ export function SingleReaderView({
           value="preview"
           className="mt-0 min-h-0 flex-1 overflow-hidden"
         >
-          <ScrollArea className="h-full">
-            <div
-              className={cn(
-                file
-                  ? "mx-auto w-full max-w-3xl px-5 py-8 sm:px-8 lg:px-10"
-                  : "flex min-h-full w-full items-center justify-center p-4 sm:p-6",
+          {file?.kind === "screenplay" && isEditing ? (
+            <ScreenplayEditor
+              activeSourceLine={getSpeakingLine(
+                reader,
+                activeTab.id,
+                activeModel.readAloudChunkLines,
               )}
-            >
-              {file ? (
-                <EditableMarkdownPreview
-                  activeSourceLine={getSpeakingLine(
-                    reader,
-                    activeTab.id,
-                    activeModel.readAloudChunkLines,
-                  )}
-                  content={file.content}
-                  isEditing={file.kind === "markdown" && isEditing}
-                  key={`${activeTab.id}:${isEditing ? "editing" : "reading"}`}
-                  onActiveHeadingChange={(headingId) =>
-                    updateTab(activeTab.id, { activeHeadingId: headingId })
-                  }
-                  onChange={(content) => onSourceChange(activeTab.id, content)}
-                />
-              ) : (
-                <div className="flex w-full max-w-md flex-col gap-4">
-                  {activeTab.error ? (
-                    <Alert variant="destructive">
-                      <AlertCircle aria-hidden="true" />
-                      <AlertTitle>File not loaded</AlertTitle>
-                      <AlertDescription>{activeTab.error}</AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <EmptyPreview
-                    isDragging={isDragging}
-                    onChooseFile={onChooseFile}
-                    onPaste={handlePaste}
-                    onPasteMarkdown={onOpenPaste}
+              content={file.content}
+              onActiveHeadingChange={(headingId) =>
+                updateTab(activeTab.id, { activeHeadingId: headingId })
+              }
+              onChange={(content) => onSourceChange(activeTab.id, content)}
+              showLivePreview
+            />
+          ) : (
+            <ScrollArea className="h-full">
+              <div
+                className={cn(
+                  file
+                    ? "mx-auto w-full max-w-3xl px-5 py-8 sm:px-8 lg:px-10"
+                    : "flex min-h-full w-full items-center justify-center p-4 sm:p-6",
+                )}
+              >
+                {file ? (
+                  <DocumentPreview
+                    activeSourceLine={getSpeakingLine(
+                      reader,
+                      activeTab.id,
+                      activeModel.readAloudChunkLines,
+                    )}
+                    file={file}
+                    isEditing={isEditing}
+                    key={`${activeTab.id}:${isEditing ? "editing" : "reading"}`}
+                    onActiveHeadingChange={(headingId) =>
+                      updateTab(activeTab.id, { activeHeadingId: headingId })
+                    }
+                    onChange={(content) =>
+                      onSourceChange(activeTab.id, content)
+                    }
                   />
-                </div>
-              )}
-            </div>
-          </ScrollArea>
+                ) : (
+                  <div className="flex w-full max-w-md flex-col gap-4">
+                    {activeTab.error ? (
+                      <Alert variant="destructive">
+                        <AlertCircle aria-hidden="true" />
+                        <AlertTitle>File not loaded</AlertTitle>
+                        <AlertDescription>{activeTab.error}</AlertDescription>
+                      </Alert>
+                    ) : null}
+                    <EmptyPreview
+                      isDragging={isDragging}
+                      onChooseFile={onChooseFile}
+                      onPaste={handlePaste}
+                      onPasteMarkdown={onOpenPaste}
+                    />
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          )}
         </TabsContent>
 
-        {file?.kind === "markdown" ? (
+        {file && file.kind !== "pdf" ? (
           <TabsContent
             value="source"
             className="mt-0 min-h-0 flex-1 overflow-hidden"
           >
             <SourceView
               content={file.content}
+              label={getSourceLabel(file)}
               onChange={(content) => onSourceChange(activeTab.id, content)}
             />
           </TabsContent>
@@ -304,14 +327,7 @@ function SplitReaderPane({
           onEditingChange(false);
         }
 
-        updateTab(tab.id, {
-          view:
-            value === "source" && file?.kind === "markdown"
-              ? "source"
-              : value === "original" && file?.kind === "pdf"
-                ? "original"
-                : "preview",
-        });
+        updateTab(tab.id, { view: getReaderViewForValue(value, file) });
       }}
       value={tab.view}
     >
@@ -360,20 +376,20 @@ function SplitReaderPane({
                 <BookOpen aria-hidden="true" />
                 <span className="hidden xl:inline">Preview</span>
               </TabsTrigger>
-              {file.kind === "markdown" ? (
-                <TabsTrigger aria-label="Source" value="source">
-                  <Braces aria-hidden="true" />
-                  <span className="hidden xl:inline">Source</span>
-                </TabsTrigger>
-              ) : (
+              {file.kind === "pdf" ? (
                 <TabsTrigger aria-label="Original PDF" value="original">
                   <FileSearch aria-hidden="true" />
                   <span className="hidden xl:inline">Original</span>
                 </TabsTrigger>
+              ) : (
+                <TabsTrigger aria-label="Source" value="source">
+                  <Braces aria-hidden="true" />
+                  <span className="hidden xl:inline">Source</span>
+                </TabsTrigger>
               )}
             </TabsList>
 
-            {tab.view === "preview" && file.kind === "markdown" ? (
+            {tab.view === "preview" && file.kind !== "pdf" ? (
               <EditPreviewButton
                 compact
                 isEditing={isEditing}
@@ -398,48 +414,65 @@ function SplitReaderPane({
         value="preview"
         className="mt-0 min-h-0 flex-1 overflow-hidden"
       >
-        <ScrollArea className="h-full">
-          <div
-            className={cn(
-              file
-                ? "mx-auto w-full max-w-3xl px-5 py-8"
-                : "flex min-h-full w-full items-center justify-center p-6",
+        {file?.kind === "screenplay" && isEditing ? (
+          <ScreenplayEditor
+            activeSourceLine={getSpeakingLine(
+              reader,
+              tab.id,
+              model.readAloudChunkLines,
             )}
-          >
-            {file ? (
-              <EditableMarkdownPreview
-                activeSourceLine={getSpeakingLine(
-                  reader,
-                  tab.id,
-                  model.readAloudChunkLines,
-                )}
-                content={file.content}
-                isEditing={file.kind === "markdown" && isEditing}
-                key={`${tab.id}:${isEditing ? "editing" : "reading"}`}
-                onActiveHeadingChange={(headingId) =>
-                  updateTab(tab.id, { activeHeadingId: headingId })
-                }
-                onChange={(content) => onSourceChange(tab.id, content)}
-              />
-            ) : (
-              <div className="max-w-sm rounded-lg border border-dashed p-6 text-center">
-                <p className="text-sm font-medium">No document in this tab</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Select the tab from the tab strip to open or paste markdown.
-                </p>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+            content={file.content}
+            onActiveHeadingChange={(headingId) =>
+              updateTab(tab.id, { activeHeadingId: headingId })
+            }
+            onChange={(content) => onSourceChange(tab.id, content)}
+            showLivePreview={false}
+          />
+        ) : (
+          <ScrollArea className="h-full">
+            <div
+              className={cn(
+                file
+                  ? "mx-auto w-full max-w-3xl px-5 py-8"
+                  : "flex min-h-full w-full items-center justify-center p-6",
+              )}
+            >
+              {file ? (
+                <DocumentPreview
+                  activeSourceLine={getSpeakingLine(
+                    reader,
+                    tab.id,
+                    model.readAloudChunkLines,
+                  )}
+                  file={file}
+                  isEditing={isEditing}
+                  key={`${tab.id}:${isEditing ? "editing" : "reading"}`}
+                  onActiveHeadingChange={(headingId) =>
+                    updateTab(tab.id, { activeHeadingId: headingId })
+                  }
+                  onChange={(content) => onSourceChange(tab.id, content)}
+                />
+              ) : (
+                <div className="max-w-sm rounded-lg border border-dashed p-6 text-center">
+                  <p className="text-sm font-medium">No document in this tab</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Select the tab from the tab strip to open or paste markdown.
+                  </p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        )}
       </TabsContent>
 
-      {file?.kind === "markdown" ? (
+      {file && file.kind !== "pdf" ? (
         <TabsContent
           value="source"
           className="mt-0 min-h-0 flex-1 overflow-hidden"
         >
           <SourceView
             content={file.content}
+            label={getSourceLabel(file)}
             onChange={(content) => onSourceChange(tab.id, content)}
           />
         </TabsContent>
@@ -460,4 +493,88 @@ function SplitReaderPane({
       ) : null}
     </Tabs>
   );
+}
+
+function DocumentPreview({
+  activeSourceLine,
+  file,
+  isEditing,
+  onActiveHeadingChange,
+  onChange,
+}: {
+  activeSourceLine: null | number;
+  file: LoadedFile;
+  isEditing: boolean;
+  onActiveHeadingChange: (headingId: string) => void;
+  onChange: (content: string) => void;
+}) {
+  if (file.kind === "screenplay") {
+    return (
+      <ScreenplayPreview
+        activeSourceLine={activeSourceLine}
+        content={file.content}
+        onActiveHeadingChange={onActiveHeadingChange}
+      />
+    );
+  }
+
+  return (
+    <EditableMarkdownPreview
+      activeSourceLine={activeSourceLine}
+      content={file.content}
+      isEditing={file.kind === "markdown" && isEditing}
+      onActiveHeadingChange={onActiveHeadingChange}
+      onChange={onChange}
+    />
+  );
+}
+
+// Screenplay editing: the Fountain text, with the formatted screenplay
+// updating beside it when there is room.
+function ScreenplayEditor({
+  activeSourceLine,
+  content,
+  onActiveHeadingChange,
+  onChange,
+  showLivePreview,
+}: {
+  activeSourceLine: null | number;
+  content: string;
+  onActiveHeadingChange: (headingId: string) => void;
+  onChange: (content: string) => void;
+  showLivePreview: boolean;
+}) {
+  return (
+    <div className="flex h-full min-h-0">
+      <div
+        className={cn(
+          "min-w-0 flex-1",
+          showLivePreview && "md:border-r md:border-border/70",
+        )}
+      >
+        <SourceView
+          content={content}
+          label="Editable Fountain screenplay"
+          onChange={onChange}
+        />
+      </div>
+      {showLivePreview ? (
+        <ScrollArea className="hidden h-full min-w-0 flex-1 md:block">
+          <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8">
+            <ScreenplayPreview
+              activeSourceLine={activeSourceLine}
+              content={content}
+              onActiveHeadingChange={onActiveHeadingChange}
+            />
+          </div>
+        </ScrollArea>
+      ) : null}
+    </div>
+  );
+}
+
+function getSourceLabel(file: LoadedFile) {
+  return file.kind === "screenplay"
+    ? "Editable Fountain screenplay"
+    : "Editable markdown source";
 }

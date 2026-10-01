@@ -1,9 +1,11 @@
+import { hasFountainExtension } from "@/lib/fountain/parse";
 import { hasMermaidExtension } from "@/lib/markdown/mermaid";
 import { toPlainSpeechText } from "@/lib/markdown/speech";
 import type {
   LoadedFile,
   ReaderState,
   ReaderTab,
+  ReaderView,
 } from "@/lib/markdown/types";
 
 export function isMarkdownFile(file: File) {
@@ -25,6 +27,10 @@ export function isMermaidFile(file: File) {
   return hasMermaidExtension(file.name);
 }
 
+export function isFountainFile(file: File) {
+  return hasFountainExtension(file.name);
+}
+
 export function isPdfFile(file: File) {
   return (
     file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf"
@@ -32,7 +38,29 @@ export function isPdfFile(file: File) {
 }
 
 export function isSupportedDocumentFile(file: File) {
-  return isMarkdownFile(file) || isMermaidFile(file) || isPdfFile(file);
+  return (
+    isMarkdownFile(file) ||
+    isMermaidFile(file) ||
+    isFountainFile(file) ||
+    isPdfFile(file)
+  );
+}
+
+// PDFs pair the reader with their original pages; Markdown and screenplays
+// pair it with their editable source.
+export function getReaderViewForValue(
+  value: unknown,
+  file: LoadedFile | null,
+): ReaderView {
+  if (value === "original" && file?.kind === "pdf") {
+    return "original";
+  }
+
+  if (value === "source" && file && file.kind !== "pdf") {
+    return "source";
+  }
+
+  return "preview";
 }
 
 export function createDocumentId() {
@@ -203,15 +231,27 @@ export function normalizeDocumentName(
     return null;
   }
 
+  if (kind === "screenplay") {
+    return hasFountainExtension(safeName) ? safeName : `${safeName}.fountain`;
+  }
+
   return safeName.toLowerCase().endsWith(".pdf")
     ? safeName
     : `${safeName}.pdf`;
 }
 
-// Turns a document name into a safe filename for downloading, guaranteeing a
-// markdown extension so the saved file opens as markdown. PDF and Mermaid
+// Turns a document name into a safe filename for downloading. Screenplays
+// download as the Fountain text they hold. Everything else guarantees a
+// markdown extension so the saved file opens as markdown: PDF and Mermaid
 // documents hold converted Markdown, so their source extension is dropped.
-export function getDownloadFileName(name: string) {
+export function getDownloadFileName(
+  name: string,
+  kind: LoadedFile["kind"] = "markdown",
+) {
+  if (kind === "screenplay") {
+    return normalizeDocumentName(name, "screenplay") ?? "screenplay.fountain";
+  }
+
   const withoutSourceExtension = name.replace(/\.(pdf|mmd|mermaid)$/i, "");
 
   return normalizeMarkdownDocumentName(withoutSourceExtension) ?? "document.md";

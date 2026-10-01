@@ -61,7 +61,17 @@ export type LoadedPdfFile = LoadedFileBase & {
   source: "file";
 };
 
-export type LoadedFile = LoadedMarkdownFile | LoadedPdfFile;
+// A Fountain screenplay. `content` is the original Fountain text, which the
+// screenplay preview parses on render and Source view edits directly.
+export type LoadedScreenplayFile = LoadedFileBase & {
+  kind: "screenplay";
+  source: "file";
+};
+
+export type LoadedFile =
+  | LoadedMarkdownFile
+  | LoadedPdfFile
+  | LoadedScreenplayFile;
 
 export type ReaderView = "original" | "preview" | "source";
 
@@ -98,5 +108,7 @@ export type ReaderState = {
 export type DocumentStats = {
   lines: number;
   readingMinutes: number;
+  // Screenplays only: the number of scene headings.
+  scenes?: number;
   words: number;
 };

@@ -34,6 +34,7 @@ import { useReaderTabModel } from "@/hooks/use-reader-tab-model";
 import { ACCEPTED_FILE_TYPES } from "@/lib/markdown/constants";
 import {
   createReaderTab,
+  getReaderViewForValue,
   isEditablePasteTarget,
   normalizeDocumentName,
 } from "@/lib/markdown/document";
@@ -144,7 +145,7 @@ export function MarkdownReader() {
     commitReaderState({
       ...currentState,
       tabs: currentState.tabs.map((tab) => {
-        if (tab.id !== tabId || tab.file?.kind !== "markdown") {
+        if (tab.id !== tabId || !tab.file || tab.file.kind === "pdf") {
           return tab;
         }
 
@@ -407,7 +408,7 @@ export function MarkdownReader() {
           <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[#58D1E2] bg-[#58D1E2]/12 px-10 py-8 text-center text-[#03444A] shadow-lg dark:text-[#58D1E2]">
             <Upload className="size-8" aria-hidden="true" />
             <p className="text-base font-semibold">
-              Drop Markdown, Mermaid, or PDF documents to open
+              Drop Markdown, Mermaid, Fountain, or PDF documents to open
             </p>
             <p className="text-sm text-muted-foreground">
               Each file opens in its own tab
@@ -424,12 +425,7 @@ export function MarkdownReader() {
           }
 
           updateTab(activeTab.id, {
-            view:
-              value === "source" && file?.kind === "markdown"
-                ? "source"
-                : value === "original" && file?.kind === "pdf"
-                  ? "original"
-                  : "preview",
+            view: getReaderViewForValue(value, file),
           });
         }}
         value={documentView}
@@ -494,7 +490,7 @@ export function MarkdownReader() {
 
               <div className="flex shrink-0 items-center gap-1.5">
                 <Button
-                  aria-label="Open a Markdown, Mermaid, or PDF document"
+                  aria-label="Open a Markdown, Mermaid, Fountain, or PDF document"
                   onClick={openFilePicker}
                   size="icon"
                   title="Open file"
@@ -517,14 +513,18 @@ export function MarkdownReader() {
                   aria-label={
                     file.kind === "pdf"
                       ? "Export extracted PDF text as Markdown"
-                      : "Download this Markdown file"
+                      : file.kind === "screenplay"
+                        ? "Download this Fountain screenplay"
+                        : "Download this Markdown file"
                   }
                   onClick={downloadDocument}
                   size="icon"
                   title={
                     file.kind === "pdf"
                       ? "Export extracted text as .md"
-                      : "Download .md"
+                      : file.kind === "screenplay"
+                        ? "Download .fountain"
+                        : "Download .md"
                   }
                   type="button"
                   variant="secondary"
@@ -544,20 +544,20 @@ export function MarkdownReader() {
                     <BookOpen aria-hidden="true" />
                     <span className="hidden xl:inline">Preview</span>
                   </TabsTrigger>
-                  {file.kind === "markdown" ? (
-                    <TabsTrigger aria-label="Source" value="source">
-                      <Braces aria-hidden="true" />
-                      <span className="hidden xl:inline">Source</span>
-                    </TabsTrigger>
-                  ) : (
+                  {file.kind === "pdf" ? (
                     <TabsTrigger aria-label="Original PDF" value="original">
                       <FileSearch aria-hidden="true" />
                       <span className="hidden xl:inline">Original</span>
                     </TabsTrigger>
+                  ) : (
+                    <TabsTrigger aria-label="Source" value="source">
+                      <Braces aria-hidden="true" />
+                      <span className="hidden xl:inline">Source</span>
+                    </TabsTrigger>
                   )}
                 </TabsList>
 
-                {!splitTab && file.kind === "markdown" ? (
+                {!splitTab && file.kind !== "pdf" ? (
                   documentView === "preview" ? (
                     <EditPreviewButton
                       isEditing={editingTabIds.has(activeTab.id)}

@@ -508,8 +508,171 @@
     text-decoration: none;
   }
 
+  /* Screenplay preview. The 60-character measure is the width of 12pt
+     Courier between standard screenplay margins; cue and dialogue indents
+     are shares of it, so the layout scales down on narrow screens. */
+  .screenplay-preview {
+    color: var(--foreground);
+    font-family:
+      var(--font-screenplay), "Courier Prime", "Courier New", Courier,
+      monospace;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-inline: auto;
+    max-width: 61ch;
+  }
+
+  .screenplay-preview > * + * {
+    margin-top: 1.5em;
+  }
+
+  .screenplay-preview u {
+    text-underline-offset: 0.2em;
+  }
+
+  .screenplay-title-page {
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 3rem;
+    text-align: center;
+  }
+
+  .screenplay-title-headline > * + * {
+    margin-top: 1.5em;
+  }
+
+  .screenplay-title-headline [data-title-key="title"] {
+    font-size: 1.15em;
+    font-weight: 700;
+  }
+
+  .screenplay-title-details {
+    color: var(--muted-foreground);
+    display: grid;
+    font-size: 0.9em;
+    gap: 1em;
+    margin-top: 3rem;
+    text-align: left;
+  }
+
+  .screenplay-title-details dt {
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .screenplay-preview > .screenplay-scene-heading {
+    font-weight: 700;
+    margin-top: 2.25em;
+    scroll-margin-top: 1.5rem;
+    text-transform: uppercase;
+  }
+
+  .screenplay-scene-number {
+    color: var(--muted-foreground);
+    float: right;
+    font-weight: 400;
+    margin-left: 2ch;
+  }
+
+  .screenplay-action,
+  .screenplay-centered,
+  .screenplay-lyrics,
+  .screenplay-line-dialogue,
+  .screenplay-line-lyric {
+    white-space: pre-wrap;
+  }
+
+  .screenplay-centered {
+    text-align: center;
+  }
+
+  .screenplay-lyrics,
+  .screenplay-line-lyric {
+    font-style: italic;
+  }
+
+  .screenplay-transition {
+    text-align: right;
+    text-transform: uppercase;
+  }
+
+  .screenplay-character {
+    margin-left: 37%;
+    text-transform: uppercase;
+  }
+
+  .screenplay-line-dialogue,
+  .screenplay-line-lyric {
+    margin-left: 17%;
+    max-width: 58%;
+  }
+
+  .screenplay-line-parenthetical {
+    margin-left: 27%;
+    max-width: 40%;
+  }
+
+  .screenplay-dual-dialogue {
+    display: grid;
+    gap: 3ch;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .screenplay-dual-dialogue .screenplay-character {
+    margin-left: 25%;
+  }
+
+  .screenplay-dual-dialogue .screenplay-line-dialogue,
+  .screenplay-dual-dialogue .screenplay-line-lyric {
+    margin-left: 0;
+    max-width: none;
+  }
+
+  .screenplay-dual-dialogue .screenplay-line-parenthetical {
+    margin-left: 10%;
+    max-width: none;
+  }
+
+  /* Sections, synopses and notes are the writer's scaffolding, not part of
+     the printed script, so they read as annotations. */
+  .screenplay-preview > .screenplay-section {
+    color: var(--muted-foreground);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin-top: 2.5em;
+    scroll-margin-top: 1.5rem;
+    text-transform: uppercase;
+  }
+
+  .screenplay-synopsis {
+    color: var(--muted-foreground);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-style: italic;
+  }
+
+  .screenplay-note {
+    background: color-mix(in oklab, var(--core-teal) 12%, transparent);
+    border-radius: 0.25rem;
+    color: var(--muted-foreground);
+    font-family: var(--font-sans);
+    font-size: 0.85em;
+    padding: 0 0.3ch;
+  }
+
+  .screenplay-page-break {
+    border: 0;
+    border-top: 1px dashed var(--border);
+    margin-block: 2.5em;
+  }
+
   /* The passage currently being read aloud. */
-  .markdown-preview [data-speaking] {
+  .markdown-preview [data-speaking],
+  .screenplay-preview [data-speaking] {
     background-color: color-mix(in oklab, var(--core-teal) 10%, transparent);
     border-radius: 0.375rem;
     box-shadow: inset 0 0 0 0.5px
@@ -519,7 +682,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .markdown-preview [data-speaking] {
+    .markdown-preview [data-speaking],
+    .screenplay-preview [data-speaking] {
       transition: none;
     }
   }
