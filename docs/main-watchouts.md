@@ -1,4 +1,4 @@
-# Markdown Reader Main Watchouts
+# VizStats Reader Main Watchouts
 
 These are the main implementation watchouts to keep visible as the reader grows.
 

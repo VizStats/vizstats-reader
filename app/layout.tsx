@@ -29,8 +29,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Markdown Reader",
-  description: "Drop a markdown file and read a local preview.",
+  title: "VizStats Reader",
+  description:
+    "Read Markdown, PDFs, screenplays and diagrams in your browser. Nothing is uploaded.",
   icons: {
     icon: [
       // Theme-aware SVG favicon (preferred by modern browsers).

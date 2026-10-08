@@ -2,13 +2,13 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/assets/logo-mark.svg" />
-  <img alt="Markdown Reader logo" src="public/assets/logo-mark-dark.svg" width="88" />
+  <img alt="VizStats Reader logo" src="public/assets/logo-mark-dark.svg" width="88" />
 </picture>
 
-<h1>Markdown Reader</h1>
+<h1>VizStats Reader</h1>
 
 <p>
-  A fast, <strong>local-first</strong> Markdown and PDF reader with a browser-style, full-width interface.<br />
+  A fast, <strong>local-first</strong> reader for Markdown, PDFs, screenplays, and diagrams, with a browser-style, full-width interface.<br />
   Open, drop, or paste documents and read them in a clean, distraction-free preview — files never leave your browser, nothing is uploaded.
 </p>
 

@@ -1,5 +1,5 @@
 {
-  "name": "markdown-reader",
+  "name": "vizstats-reader",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.10.0",

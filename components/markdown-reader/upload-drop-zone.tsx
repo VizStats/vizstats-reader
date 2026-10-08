@@ -74,5 +74,20 @@ function UploadDropZone({
 }
 
 export function EmptyPreview(props: DropZoneProps) {
-  return <UploadDropZone {...props} />;
+  return (
+    <>
+      <UploadDropZone {...props} />
+      <p className="text-center text-xs text-muted-foreground">
+        Made by{" "}
+        <a
+          className="rounded-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          href="https://www.vizstats.com"
+          rel="noopener"
+          target="_blank"
+        >
+          VizStats
+        </a>
+      </p>
+    </>
+  );
 }

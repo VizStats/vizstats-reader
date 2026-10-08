@@ -362,7 +362,7 @@ export function ReaderTabs({
       <div className="mb-1 flex size-7 shrink-0 items-center justify-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          alt="Markdown Reader"
+          alt="VizStats Reader"
           className="size-6 object-contain dark:hidden"
           src="/assets/logo-mark-dark.svg"
         />
