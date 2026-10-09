@@ -541,10 +541,13 @@ export function ReaderTabs({
         </div>
       )}
 
-      <ReaderStorageMenu
-        onClearSession={onClearSession}
-        status={persistenceStatus}
-      />
+      {/* Nothing is saved, and nothing can be cleared, until a tab holds a document. */}
+      {tabs.some((tab) => tab.file) ? (
+        <ReaderStorageMenu
+          onClearSession={onClearSession}
+          status={persistenceStatus}
+        />
+      ) : null}
 
       <div className="mb-0.5 shrink-0">
         <ModeToggle />
