@@ -54,6 +54,8 @@ export function ReaderStorageMenu({
           : "Saved to this browser";
 
   const StatusIcon = isBusy ? LoaderCircle : isError ? AlertCircle : HardDrive;
+  // The trigger stays still while saving; only a failure needs attention.
+  const TriggerIcon = isError ? AlertCircle : HardDrive;
 
   return (
     <>
@@ -64,11 +66,7 @@ export function ReaderStorageMenu({
               aria-label={statusLabel}
               className={cn(
                 "mb-0.5 size-9 shrink-0",
-                isError
-                  ? "text-destructive"
-                  : isBusy
-                    ? "text-[#03444A] dark:text-[#58D1E2]"
-                    : "text-muted-foreground",
+                isError ? "text-destructive" : "text-muted-foreground",
               )}
               size="icon"
               type="button"
@@ -76,10 +74,7 @@ export function ReaderStorageMenu({
             />
           }
         >
-          <StatusIcon
-            className={cn("size-4", isBusy && "animate-spin")}
-            aria-hidden="true"
-          />
+          <TriggerIcon className="size-4" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60">
           <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">

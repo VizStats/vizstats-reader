@@ -8,6 +8,7 @@ import {
   Columns2,
   Download,
   FileSearch,
+  LoaderCircle,
   PanelRightClose,
   Upload,
 } from "lucide-react";
@@ -603,7 +604,9 @@ export function MarkdownReader() {
         />
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {splitTab ? (
+          {persistenceStatus === "restoring" ? (
+            <SessionRestoring />
+          ) : splitTab ? (
             <>
               <SplitReaderView
                 activeTabId={activeTab.id}
@@ -665,5 +668,25 @@ export function MarkdownReader() {
         open={isPasteDialogOpen}
       />
     </main>
+  );
+}
+
+// Shown until the saved session loads, so a reload never flashes the empty
+// "Open a document" state. The message fades in only if loading is slow.
+function SessionRestoring() {
+  return (
+    <div
+      aria-busy="true"
+      className="flex flex-1 items-center justify-center"
+      role="status"
+    >
+      <div className="flex animate-in items-center gap-2 text-sm text-muted-foreground delay-300 duration-300 fade-in fill-mode-both">
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-4 animate-spin motion-reduce:animate-none"
+        />
+        Opening your documents…
+      </div>
+    </div>
   );
 }

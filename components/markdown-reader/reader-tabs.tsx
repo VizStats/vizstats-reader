@@ -374,168 +374,172 @@ export function ReaderTabs({
           src="/assets/logo-mark.svg"
         />
       </div>
-      <div className="flex min-w-0 flex-1 items-end gap-1">
-        <div
-          ref={tabListRef}
-          aria-label="Reader tabs"
-          className="flex min-w-0 items-end gap-0.5 overflow-x-auto scrollbar-hide"
-          role="tablist"
-        >
-          {tabs.map((tab, index) => {
-            const isActive = tab.id === activeTabId;
-            const tabGroup = tab.groupId
-              ? groupsById.get(tab.groupId)
-              : undefined;
-            const shouldRenderGroup =
-              tabGroup && !renderedGroupIds.has(tabGroup.id);
-
-            if (tabGroup) {
-              renderedGroupIds.add(tabGroup.id);
-            }
-
-            const groupTabs = tabGroup
-              ? tabs.filter((candidate) => candidate.groupId === tabGroup.id)
-              : [];
-            const groupHasActiveTab = groupTabs.some(
-              (candidate) => candidate.id === activeTabId,
-            );
-            const label = getReaderTabLabel(tab, index);
-            const canClose =
-              tabs.length > 1 || Boolean(tab.file) || Boolean(tab.error);
-            const isDropTarget = dropTarget?.tabId === tab.id;
-
-            return (
-              <Fragment key={tab.id}>
-                {shouldRenderGroup ? (
-                  <div
-                    ref={
-                      tabGroup.collapsed && groupHasActiveTab
-                        ? activeTabRef
-                        : undefined
-                    }
-                    className="flex shrink-0 items-end"
-                  >
-                    <ReaderTabGroupLabel
-                      canDrag={orderedGroups.length > 1}
-                      dropPlacement={
-                        groupDropTarget?.groupId === tabGroup.id
-                          ? groupDropTarget.placement
-                          : null
-                      }
-                      group={tabGroup}
-                      isDragging={draggedGroupId === tabGroup.id}
-                      onColorChange={(color: ReaderTabGroupColor) =>
-                        onUpdateTabGroup(tabGroup.id, { color })
-                      }
-                      onDragEnd={resetDragState}
-                      onDragOver={(event) =>
-                        void updateGroupDropTarget(event, tabGroup.id)
-                      }
-                      onDragStart={(event) =>
-                        handleGroupDragStart(event, tabGroup.id)
-                      }
-                      onDrop={(event) =>
-                        handleGroupDrop(event, tabGroup.id)
-                      }
-                      onMoveByKeyboard={(direction) =>
-                        moveGroupByKeyboard(tabGroup.id, direction)
-                      }
-                      onRename={(name) => onUpdateTabGroup(tabGroup.id, { name })}
-                      onToggle={() => onToggleTabGroup(tabGroup.id)}
-                      onUngroup={() => onUngroupTabs(tabGroup.id)}
-                      tabCount={groupTabs.length}
-                    />
-                  </div>
-                ) : null}
-
-                {!tabGroup?.collapsed ? (
-                  <div
-                    ref={isActive ? activeTabRef : undefined}
-                    className={cn(
-                      "group relative flex min-w-24 max-w-56 -translate-y-0.5 flex-[1_1_14rem] items-center rounded-t-lg border border-b-0 text-xs transition",
-                      isActive
-                        ? cn(
-                            "z-10 text-foreground -mb-px translate-y-0 pb-px shadow-[0_-1px_2px_rgba(0,0,0,0.04)] bg-card",
-                            tabGroup
-                              ? TAB_GROUP_ACTIVE_BORDER_CLASSES[tabGroup.color]
-                              : "border-border/70",
-                          )
-                        : cn(
-                            "text-muted-foreground hover:text-foreground",
-                            tabGroup
-                              ? cn(
-                                  "border-x-0 border-t-0 border-b translate-y-0",
-                                  TAB_GROUP_INACTIVE_BORDER_CLASSES[
-                                    tabGroup.color
-                                  ],
-                                  TAB_GROUP_TAB_TINT_CLASSES[tabGroup.color],
-                                )
-                              : "bg-card/80 hover:bg-background/60",
-                            !tabGroup && "border-none",
-                          ),
-                      tabGroup && "-ml-0.5",
-                      draggedTabId === tab.id && "opacity-45",
-                    )}
-                    onDragOver={(event) => handleTabDragOver(event, tab.id)}
-                    onDrop={(event) => handleTabDrop(event, tab.id)}
-                  >
-                    {isDropTarget ? (
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-[#03444A] shadow-[0_0_0_1px_var(--background)] dark:bg-[#58D1E2]",
-                          dropTarget.placement === "before"
-                            ? "-left-1"
-                            : "-right-1",
-                        )}
-                      />
-                    ) : null}
-                    <ReaderTabTrigger
-                      canClose={canClose}
-                      canDrag={tabs.length > 1}
-                      groups={groups}
-                      isActive={isActive}
-                      label={label}
-                      onClose={() => onCloseTab(tab.id)}
-                      onCreateGroup={() => onCreateTabGroup(tab.id)}
-                      onDragEnd={resetDragState}
-                      onDragStart={(event) => handleTabDragStart(event, tab.id)}
-                      onKeyDown={(event) => handleTabKeyDown(event, tab, index)}
-                      onMoveToGroup={(groupId) =>
-                        onMoveTabToGroup(tab.id, groupId)
-                      }
-                      onRename={(name) => {
-                        onRenameTab(tab.id, name);
-                        setAnnouncement(`${label} renamed to ${name}.`);
-                      }}
-                      onSelect={() => onSelectTab(tab.id)}
-                      tab={tab}
-                    />
-                  </div>
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </div>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                aria-label="New reader tab"
-                className="mb-1 size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
-                onClick={onNewTab}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              />
-            }
+      {persistenceStatus === "restoring" ? (
+        <div className="flex-1" />
+      ) : (
+        <div className="flex min-w-0 flex-1 items-end gap-1">
+          <div
+            ref={tabListRef}
+            aria-label="Reader tabs"
+            className="flex min-w-0 items-end gap-0.5 overflow-x-auto scrollbar-hide"
+            role="tablist"
           >
-            <Plus aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent>New tab</TooltipContent>
-        </Tooltip>
-      </div>
+            {tabs.map((tab, index) => {
+              const isActive = tab.id === activeTabId;
+              const tabGroup = tab.groupId
+                ? groupsById.get(tab.groupId)
+                : undefined;
+              const shouldRenderGroup =
+                tabGroup && !renderedGroupIds.has(tabGroup.id);
+
+              if (tabGroup) {
+                renderedGroupIds.add(tabGroup.id);
+              }
+
+              const groupTabs = tabGroup
+                ? tabs.filter((candidate) => candidate.groupId === tabGroup.id)
+                : [];
+              const groupHasActiveTab = groupTabs.some(
+                (candidate) => candidate.id === activeTabId,
+              );
+              const label = getReaderTabLabel(tab, index);
+              const canClose =
+                tabs.length > 1 || Boolean(tab.file) || Boolean(tab.error);
+              const isDropTarget = dropTarget?.tabId === tab.id;
+
+              return (
+                <Fragment key={tab.id}>
+                  {shouldRenderGroup ? (
+                    <div
+                      ref={
+                        tabGroup.collapsed && groupHasActiveTab
+                          ? activeTabRef
+                          : undefined
+                      }
+                      className="flex shrink-0 items-end"
+                    >
+                      <ReaderTabGroupLabel
+                        canDrag={orderedGroups.length > 1}
+                        dropPlacement={
+                          groupDropTarget?.groupId === tabGroup.id
+                            ? groupDropTarget.placement
+                            : null
+                        }
+                        group={tabGroup}
+                        isDragging={draggedGroupId === tabGroup.id}
+                        onColorChange={(color: ReaderTabGroupColor) =>
+                          onUpdateTabGroup(tabGroup.id, { color })
+                        }
+                        onDragEnd={resetDragState}
+                        onDragOver={(event) =>
+                          void updateGroupDropTarget(event, tabGroup.id)
+                        }
+                        onDragStart={(event) =>
+                          handleGroupDragStart(event, tabGroup.id)
+                        }
+                        onDrop={(event) =>
+                          handleGroupDrop(event, tabGroup.id)
+                        }
+                        onMoveByKeyboard={(direction) =>
+                          moveGroupByKeyboard(tabGroup.id, direction)
+                        }
+                        onRename={(name) => onUpdateTabGroup(tabGroup.id, { name })}
+                        onToggle={() => onToggleTabGroup(tabGroup.id)}
+                        onUngroup={() => onUngroupTabs(tabGroup.id)}
+                        tabCount={groupTabs.length}
+                      />
+                    </div>
+                  ) : null}
+
+                  {!tabGroup?.collapsed ? (
+                    <div
+                      ref={isActive ? activeTabRef : undefined}
+                      className={cn(
+                        "group relative flex min-w-24 max-w-56 -translate-y-0.5 flex-[1_1_14rem] items-center rounded-t-lg border border-b-0 text-xs transition",
+                        isActive
+                          ? cn(
+                              "z-10 text-foreground -mb-px translate-y-0 pb-px shadow-[0_-1px_2px_rgba(0,0,0,0.04)] bg-card",
+                              tabGroup
+                                ? TAB_GROUP_ACTIVE_BORDER_CLASSES[tabGroup.color]
+                                : "border-border/70",
+                            )
+                          : cn(
+                              "text-muted-foreground hover:text-foreground",
+                              tabGroup
+                                ? cn(
+                                    "border-x-0 border-t-0 border-b translate-y-0",
+                                    TAB_GROUP_INACTIVE_BORDER_CLASSES[
+                                      tabGroup.color
+                                    ],
+                                    TAB_GROUP_TAB_TINT_CLASSES[tabGroup.color],
+                                  )
+                                : "bg-card/80 hover:bg-background/60",
+                              !tabGroup && "border-none",
+                            ),
+                        tabGroup && "-ml-0.5",
+                        draggedTabId === tab.id && "opacity-45",
+                      )}
+                      onDragOver={(event) => handleTabDragOver(event, tab.id)}
+                      onDrop={(event) => handleTabDrop(event, tab.id)}
+                    >
+                      {isDropTarget ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-[#03444A] shadow-[0_0_0_1px_var(--background)] dark:bg-[#58D1E2]",
+                            dropTarget.placement === "before"
+                              ? "-left-1"
+                              : "-right-1",
+                          )}
+                        />
+                      ) : null}
+                      <ReaderTabTrigger
+                        canClose={canClose}
+                        canDrag={tabs.length > 1}
+                        groups={groups}
+                        isActive={isActive}
+                        label={label}
+                        onClose={() => onCloseTab(tab.id)}
+                        onCreateGroup={() => onCreateTabGroup(tab.id)}
+                        onDragEnd={resetDragState}
+                        onDragStart={(event) => handleTabDragStart(event, tab.id)}
+                        onKeyDown={(event) => handleTabKeyDown(event, tab, index)}
+                        onMoveToGroup={(groupId) =>
+                          onMoveTabToGroup(tab.id, groupId)
+                        }
+                        onRename={(name) => {
+                          onRenameTab(tab.id, name);
+                          setAnnouncement(`${label} renamed to ${name}.`);
+                        }}
+                        onSelect={() => onSelectTab(tab.id)}
+                        tab={tab}
+                      />
+                    </div>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </div>
+
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  aria-label="New reader tab"
+                  className="mb-1 size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+                  onClick={onNewTab}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                />
+              }
+            >
+              <Plus aria-hidden="true" />
+            </TooltipTrigger>
+            <TooltipContent>New tab</TooltipContent>
+          </Tooltip>
+        </div>
+      )}
 
       <ReaderStorageMenu
         onClearSession={onClearSession}
