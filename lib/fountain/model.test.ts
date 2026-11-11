@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getScreenplayBlocks, getScreenplayStats } from "@/lib/fountain/model";
+import { paginateScreenplay } from "@/lib/fountain/paginate";
 import { parseFountain } from "@/lib/fountain/parse";
 import { getReadableSpeech } from "@/lib/markdown/speech";
 
@@ -119,5 +120,25 @@ describe("getScreenplayStats", () => {
       scenes: 1,
       words: 8,
     });
+  });
+});
+
+describe("screenplay pages", () => {
+  it("gives outline headings their page and counts pages", () => {
+    const content = [
+      "INT. HOUSE - DAY",
+      ...Array.from({ length: 30 }, (_, index) => `Beat ${index + 1}.`),
+      "EXT. GARDEN - NIGHT",
+      "He leaves.",
+    ].join("\n\n");
+    const screenplay = parseFountain(content);
+    const pagination = paginateScreenplay(screenplay);
+
+    expect(
+      getScreenplayBlocks(screenplay, pagination).headings.map(
+        (heading) => heading.page,
+      ),
+    ).toEqual([1, 2]);
+    expect(getScreenplayStats(screenplay, content, pagination).pages).toBe(2);
   });
 });

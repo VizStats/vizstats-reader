@@ -508,72 +508,122 @@
     text-decoration: none;
   }
 
-  /* Screenplay preview. The 60-character measure is the width of 12pt
-     Courier between standard screenplay margins; cue and dialogue indents
-     are shares of it, so the layout scales down on narrow screens. */
+  /* Screenplay preview: printed pages at true proportions. A page is US
+     Letter in 12pt Courier, 8.5 x 11in, so 1in = 6em; type scales with the
+     reading column. The body is the 60-character measure between the 1.5in
+     and 1in margins, and cue and dialogue indents are shares of it. */
   .screenplay-preview {
+    --screenplay-paper: var(--card);
     color: var(--foreground);
+    container-type: inline-size;
+    display: grid;
     font-family:
       var(--font-screenplay), "Courier Prime", "Courier New", Courier,
       monospace;
-    font-size: 0.95rem;
-    line-height: 1.5;
+    gap: 1.5rem;
+  }
+
+  .dark .screenplay-preview {
+    --screenplay-paper: color-mix(
+      in srgb,
+      var(--core-mid-gray) 12%,
+      var(--core-charcoal)
+    );
+  }
+
+  /* The edge is a shadow, not a border, so the body keeps its full 60
+     characters. */
+  .screenplay-page {
+    background: var(--screenplay-paper);
+    border-radius: 2px;
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 1px 2px color-mix(in srgb, var(--core-charcoal) 6%, transparent),
+      0 12px 28px -18px color-mix(in srgb, var(--core-charcoal) 35%, transparent);
+    font-size: clamp(10px, 100cqi / 51, 16px);
+    line-height: 1;
     margin-inline: auto;
-    max-width: 61ch;
+    min-height: 66em;
+    padding: 6em 6em 5em 9em;
+    position: relative;
+    width: min(100%, 51em);
   }
 
-  .screenplay-preview > * + * {
-    margin-top: 1.5em;
+  .screenplay-page-number {
+    position: absolute;
+    right: 6em;
+    top: 3em;
   }
 
-  .screenplay-preview u {
+  /* One blank line between elements. */
+  .screenplay-page-body > * + * {
+    margin-top: 1lh;
+  }
+
+  .screenplay-page u {
     text-underline-offset: 0.2em;
   }
 
-  .screenplay-title-page {
-    border-bottom: 1px dashed var(--border);
-    padding-bottom: 3rem;
+  .screenplay-cover {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .screenplay-cover-headline {
+    margin-top: 16em;
     text-align: center;
   }
 
-  .screenplay-title-headline > * + * {
-    margin-top: 1.5em;
-  }
-
-  .screenplay-title-headline [data-title-key="title"] {
-    font-size: 1.15em;
+  .screenplay-cover-headline [data-title-key="title"] {
     font-weight: 700;
   }
 
-  .screenplay-title-details {
-    color: var(--muted-foreground);
-    display: grid;
-    font-size: 0.9em;
-    gap: 1em;
-    margin-top: 3rem;
-    text-align: left;
+  .screenplay-cover-headline > * + * {
+    margin-top: 1lh;
   }
 
-  .screenplay-title-details dt {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .screenplay-cover-headline > [data-title-key="credit"],
+  .screenplay-cover-headline > [data-title-key="source"] {
+    margin-top: 3lh;
   }
 
-  .screenplay-preview > .screenplay-scene-heading {
+  .screenplay-cover-foot {
+    display: flex;
+    gap: 2em;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 3em;
+  }
+
+  .screenplay-cover-foot [data-side="right"] {
+    text-align: right;
+  }
+
+  .screenplay-cover-foot dl > * + * {
+    margin-top: 1lh;
+  }
+
+  .screenplay-scene-heading {
     font-weight: 700;
-    margin-top: 2.25em;
+    position: relative;
     scroll-margin-top: 1.5rem;
     text-transform: uppercase;
   }
 
+  /* Scene numbers sit in both margins, level with the heading. */
   .screenplay-scene-number {
     color: var(--muted-foreground);
-    float: right;
     font-weight: 400;
-    margin-left: 2ch;
+    position: absolute;
+    top: 0;
+  }
+
+  .screenplay-scene-number[data-side="left"] {
+    right: calc(100% + 2em);
+  }
+
+  .screenplay-scene-number[data-side="right"] {
+    left: calc(100% + 2em);
   }
 
   .screenplay-action,
@@ -598,20 +648,25 @@
     text-transform: uppercase;
   }
 
+  /* Indents and widths in characters, matching the paginator's measures. */
+  .screenplay-character,
+  .screenplay-more {
+    margin-left: 22ch;
+  }
+
   .screenplay-character {
-    margin-left: 37%;
     text-transform: uppercase;
   }
 
   .screenplay-line-dialogue,
   .screenplay-line-lyric {
-    margin-left: 17%;
-    max-width: 58%;
+    margin-left: 10ch;
+    max-width: 35ch;
   }
 
   .screenplay-line-parenthetical {
-    margin-left: 27%;
-    max-width: 40%;
+    margin-left: 16ch;
+    max-width: 25ch;
   }
 
   .screenplay-dual-dialogue {
@@ -636,22 +691,21 @@
   }
 
   /* Sections, synopses and notes are the writer's scaffolding, not part of
-     the printed script, so they read as annotations. */
-  .screenplay-preview > .screenplay-section {
+     the printed script: they read as annotations and take no page lines. */
+  .screenplay-section,
+  .screenplay-synopsis {
     color: var(--muted-foreground);
     font-family: var(--font-sans);
-    font-size: 0.75rem;
+  }
+
+  .screenplay-section {
     font-weight: 600;
     letter-spacing: 0.08em;
-    margin-top: 2.5em;
     scroll-margin-top: 1.5rem;
     text-transform: uppercase;
   }
 
   .screenplay-synopsis {
-    color: var(--muted-foreground);
-    font-family: var(--font-sans);
-    font-size: 0.875rem;
     font-style: italic;
   }
 
@@ -664,10 +718,59 @@
     padding: 0 0.3ch;
   }
 
-  .screenplay-page-break {
-    border: 0;
-    border-top: 1px dashed var(--border);
-    margin-block: 2.5em;
+  /* Too narrow for a true page: keep the pages and their breaks, reflow the
+     text at a readable size. */
+  @container (width < 32rem) {
+    .screenplay-page {
+      font-size: 0.8125rem;
+      line-height: 1.35;
+      min-height: 0;
+      padding: 3em 1.25em 2.5em;
+    }
+
+    .screenplay-page-number {
+      right: 1.25em;
+      top: 1.25em;
+    }
+
+    .screenplay-character,
+    .screenplay-more {
+      margin-left: 37%;
+    }
+
+    .screenplay-line-dialogue,
+    .screenplay-line-lyric {
+      margin-left: 17%;
+      max-width: 58%;
+    }
+
+    .screenplay-line-parenthetical {
+      margin-left: 27%;
+      max-width: 40%;
+    }
+
+    .screenplay-cover-headline {
+      margin-top: 4em;
+    }
+
+    .screenplay-cover-foot {
+      flex-direction: column;
+      padding-top: 4em;
+    }
+
+    .screenplay-cover-foot [data-side="right"] {
+      text-align: left;
+    }
+
+    .screenplay-scene-number[data-side="left"] {
+      display: none;
+    }
+
+    .screenplay-scene-number[data-side="right"] {
+      float: right;
+      margin-left: 2ch;
+      position: static;
+    }
   }
 
   /* The passage currently being read aloud. */

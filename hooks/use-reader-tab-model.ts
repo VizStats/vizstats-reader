@@ -7,6 +7,7 @@ import {
   getScreenplayBlocks,
   getScreenplayStats,
 } from "@/lib/fountain/model";
+import { paginateScreenplay } from "@/lib/fountain/paginate";
 import { parseFountain } from "@/lib/fountain/parse";
 import { parseMarkdown } from "@/lib/markdown/parse";
 import {
@@ -40,12 +41,13 @@ export function useReaderTabModel(tab: ReaderTab | null): ReaderTabModel {
   const { blocks, headings, stats } = useMemo(() => {
     if (isScreenplay) {
       const screenplay = parseFountain(content);
-      const { headings, spoken } = getScreenplayBlocks(screenplay);
+      const pagination = paginateScreenplay(screenplay);
+      const { headings, spoken } = getScreenplayBlocks(screenplay, pagination);
 
       return {
         blocks: spoken,
         headings,
-        stats: getScreenplayStats(screenplay, content),
+        stats: getScreenplayStats(screenplay, content, pagination),
       };
     }
 

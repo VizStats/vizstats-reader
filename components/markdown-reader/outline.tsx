@@ -29,7 +29,7 @@ export function Outline({
               <a
                 aria-current={isActive ? "location" : undefined}
                 className={cn(
-                  "block truncate rounded-md px-2 py-1.5 text-sm transition hover:bg-muted hover:text-foreground",
+                  "flex items-baseline gap-2 rounded-md px-2 py-1.5 text-sm transition hover:bg-muted hover:text-foreground",
                   isActive
                     ? "bg-[#58D1E2]/12 text-foreground ring-1 ring-[#58D1E2]/25"
                     : "text-muted-foreground",
@@ -40,7 +40,15 @@ export function Outline({
                   paddingLeft: `${(heading.level - 1) * 0.75 + 0.5}rem`,
                 }}
               >
-                {heading.text}
+                <span className="min-w-0 flex-1 truncate">{heading.text}</span>
+                {heading.page ? (
+                  <span
+                    aria-label={`page ${heading.page}`}
+                    className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                  >
+                    {heading.page}
+                  </span>
+                ) : null}
               </a>
             );
           })}

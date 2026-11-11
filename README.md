@@ -30,7 +30,7 @@
 - 🗂️ **Tabbed documents** — open multiple Markdown, Fountain, and PDF files at once, browser-style.
 - 📥 **Multiple inputs** — choose or drop Markdown, Fountain, and PDF files, or paste Markdown (dialog or ⌘/Ctrl + V).
 - 🧜 **Mermaid diagrams** — ` ```mermaid ` code blocks render as themed diagrams with a code toggle; `.mmd` / `.mermaid` files open as diagram documents.
-- 🎬 **Screenplays** — `.fountain` / `.spmd` files render in standard screenplay layout, with scenes in the outline, voiced read-aloud, and side-by-side editing.
+- 🎬 **Screenplays** — `.fountain` / `.spmd` files render as printed script pages with a title page, page numbers, and an estimated runtime, plus scenes in the outline, voiced read-aloud, and side-by-side editing.
 - 📄 **PDF reading** — extract text into a reflowable reader and switch to the locally rendered original pages when layout matters.
 - 👀 **Document views** — toggle between rendered Markdown and source, or between a reflowed PDF reader and original PDF pages.
 - ✍️ **Editable preview** — switch the rendered preview into a Markdown-native rich editor with formatting controls.
@@ -44,7 +44,9 @@ Markdown is rendered with [react-markdown](https://github.com/remarkjs/react-mar
 
 Mermaid diagrams render in the browser with [Mermaid](https://mermaid.js.org), loaded only when a document contains one. Diagrams render at Mermaid's `strict` security level (label HTML sanitized, click callbacks disabled) and follow the light/dark theme. A `.mmd` or `.mermaid` file opens as a Markdown document holding one `mermaid` block and downloads as `.md`.
 
-Fountain screenplays are parsed in the browser by the reader's own parser (`lib/fountain/`), covering the [Fountain syntax](https://fountain.io/syntax): title page, scene headings and numbers, character cues and extensions, parentheticals, dual dialogue, transitions, centered text, lyrics, emphasis, sections, synopses, notes, boneyard, and page breaks. Sections and scene headings form the outline; sections, synopses, and notes show as annotations rather than script. Edit a screenplay in Source view or with the Edit button, which shows the Fountain text beside a live preview. Screenplays download as `.fountain`.
+Fountain screenplays are parsed in the browser by the reader's own parser (`lib/fountain/`), covering the [Fountain syntax](https://fountain.io/syntax): title page, scene headings and numbers, character cues and extensions, parentheticals, dual dialogue, transitions, centered text, lyrics, emphasis, sections, synopses, notes, boneyard, and page breaks. Sections and scene headings form the outline, each with its page number; sections, synopses, and notes show as annotations rather than script.
+
+Screenplays are laid out as printed pages (`lib/fountain/paginate.ts`): US Letter in 12pt Courier, 55 lines to the page, the page behind the one-page-per-minute rule, so the page count doubles as a runtime estimate. The title page prints on its own unnumbered cover, and body pages are numbered from page 2. Page breaks follow the industry conventions: a scene heading never ends a page, action splits only after a sentence with at least two lines on each side, and a speech that splits ends with (MORE) and resumes under its cue with (CONT'D). Wide columns show the page at true proportions; narrow ones keep the page breaks and reflow the text. Edit a screenplay in Source view or with the Edit button, which shows the Fountain text beside a live preview. Screenplays download as `.fountain`.
 
 PDFs are parsed and rendered in the browser with [PDF.js](https://mozilla.github.io/pdf.js/). Text-based PDFs are converted into a reflowable, read-aloud-friendly view while the original pages remain available in a separate view. Scanned PDFs without an embedded text layer require OCR and are reported as unsupported. Password-protected PDFs are not currently supported.
 

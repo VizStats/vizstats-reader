@@ -1,4 +1,5 @@
 import { getFountainPlainText } from "@/lib/fountain/inline";
+import type { ScreenplayPagination } from "@/lib/fountain/paginate";
 import type {
   DialogueBlock,
   Screenplay,
@@ -35,7 +36,10 @@ export function getScreenplayHeadingIds(screenplay: Screenplay) {
 // understand. Headings carry the printed text for the outline; `spoken` holds
 // the matching blocks with text phrased for a voice (INT. becomes Interior,
 // cues are announced once per speech, parentheticals are skipped).
-export function getScreenplayBlocks(screenplay: Screenplay) {
+export function getScreenplayBlocks(
+  screenplay: Screenplay,
+  pagination?: ScreenplayPagination,
+) {
   const ids = getScreenplayHeadingIds(screenplay);
   const headings: HeadingBlock[] = [];
   const spoken: MarkdownBlock[] = [];
@@ -74,6 +78,7 @@ export function getScreenplayBlocks(screenplay: Screenplay) {
         headings.push({
           id,
           level,
+          page: pagination?.headingPages.get(element),
           sourceLine: element.line,
           text,
           type: "heading",
@@ -125,12 +130,14 @@ export function getScreenplayBlocks(screenplay: Screenplay) {
 export function getScreenplayStats(
   screenplay: Screenplay,
   content: string,
+  pagination?: ScreenplayPagination,
 ): DocumentStats {
   const words =
     getScreenplayText(screenplay).match(/\b[\w'-]+\b/g)?.length ?? 0;
 
   return {
     lines: content ? content.replace(/\r\n?/g, "\n").split("\n").length : 0,
+    pages: pagination?.pages.length,
     readingMinutes: Math.max(1, Math.ceil(words / 220)),
     scenes: screenplay.elements.filter(
       (element) => element.type === "scene-heading",

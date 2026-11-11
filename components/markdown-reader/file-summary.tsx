@@ -73,25 +73,30 @@ export function FileSummary({
       <Separator />
 
       <dl className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch text-center">
-        <Stat label="Words" value={stats.words.toLocaleString()} />
-        <Separator orientation="vertical" />
-        <Stat
-          label={
-            file.kind === "pdf"
-              ? "Pages"
-              : file.kind === "screenplay"
-                ? "Scenes"
-                : "Lines"
-          }
-          value={(file.kind === "pdf"
-            ? file.pageCount
-            : file.kind === "screenplay"
-              ? (stats.scenes ?? 0)
-              : stats.lines
-          ).toLocaleString()}
-        />
-        <Separator orientation="vertical" />
-        <Stat label="Read" value={`${stats.readingMinutes}m`} />
+        {file.kind === "screenplay" ? (
+          // A screenplay page runs about a minute of screen time.
+          <>
+            <Stat label="Pages" value={(stats.pages ?? 0).toLocaleString()} />
+            <Separator orientation="vertical" />
+            <Stat label="Scenes" value={(stats.scenes ?? 0).toLocaleString()} />
+            <Separator orientation="vertical" />
+            <Stat label="Runtime" value={formatRuntime(stats.pages ?? 0)} />
+          </>
+        ) : (
+          <>
+            <Stat label="Words" value={stats.words.toLocaleString()} />
+            <Separator orientation="vertical" />
+            <Stat
+              label={file.kind === "pdf" ? "Pages" : "Lines"}
+              value={(file.kind === "pdf"
+                ? file.pageCount
+                : stats.lines
+              ).toLocaleString()}
+            />
+            <Separator orientation="vertical" />
+            <Stat label="Read" value={`${stats.readingMinutes}m`} />
+          </>
+        )}
       </dl>
 
       <Separator />
@@ -114,6 +119,12 @@ export function FileSummary({
       </div>
     </div>
   );
+}
+
+function formatRuntime(minutes: number) {
+  return minutes < 60
+    ? `${minutes}m`
+    : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

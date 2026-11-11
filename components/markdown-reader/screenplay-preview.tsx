@@ -9,13 +9,19 @@ import {
 } from "@/lib/fountain/inline";
 import { getScreenplayHeadingIds } from "@/lib/fountain/model";
 import {
+  paginateScreenplay,
+  type PageItem,
+  type ScreenplayPage,
+} from "@/lib/fountain/paginate";
+import {
   parseFountain,
   type DialogueBlock,
-  type Screenplay,
+  type ScreenplayElement,
   type TitlePageEntry,
 } from "@/lib/fountain/parse";
 
-// Title page keys printed centered as the headline; the rest sit below it.
+// Title page keys printed centered as the headline. The rest sit at the foot
+// of the page: contact details on the left, dates and revisions on the right.
 const HEADLINE_KEYS = new Set([
   "title",
   "credit",
@@ -23,6 +29,7 @@ const HEADLINE_KEYS = new Set([
   "authors",
   "source",
 ]);
+const RIGHT_FOOT_KEYS = new Set(["draft date", "date", "revision"]);
 
 export function ScreenplayPreview({
   activeSourceLine = null,
@@ -34,7 +41,15 @@ export function ScreenplayPreview({
   onActiveHeadingChange: (headingId: string) => void;
 }) {
   const articleRef = useRef<HTMLElement>(null);
-  const screenplay = useMemo(() => parseFountain(content), [content]);
+  const { ids, pages, screenplay } = useMemo(() => {
+    const screenplay = parseFountain(content);
+
+    return {
+      ids: getScreenplayHeadingIds(screenplay),
+      pages: paginateScreenplay(screenplay).pages,
+      screenplay,
+    };
+  }, [content]);
 
   usePreviewTracking(articleRef, {
     activeSourceLine,
@@ -42,7 +57,7 @@ export function ScreenplayPreview({
     onActiveHeadingChange,
   });
 
-  if (screenplay.elements.length === 0 && screenplay.titlePage.length === 0) {
+  if (pages.length === 0 && screenplay.titlePage.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
         This screenplay is empty.
@@ -59,7 +74,9 @@ export function ScreenplayPreview({
       {screenplay.titlePage.length > 0 ? (
         <TitlePage entries={screenplay.titlePage} />
       ) : null}
-      <ScreenplayBody screenplay={screenplay} />
+      {pages.map((page) => (
+        <Page ids={ids} key={page.number} page={page} />
+      ))}
     </article>
   );
 }
@@ -68,16 +85,17 @@ function TitlePage({ entries }: { entries: TitlePageEntry[] }) {
   const headline = entries.filter((entry) =>
     HEADLINE_KEYS.has(entry.key.toLowerCase()),
   );
-  const details = entries.filter(
+  const foot = entries.filter(
     (entry) => !HEADLINE_KEYS.has(entry.key.toLowerCase()),
   );
 
   return (
-    <header
-      className="screenplay-title-page"
+    <section
+      aria-label="Title page"
+      className="screenplay-page screenplay-cover"
       data-source-line={entries[0]!.line}
     >
-      <div className="screenplay-title-headline">
+      <div className="screenplay-cover-headline">
         {headline.map((entry) => (
           <div
             data-title-key={entry.key.toLowerCase()}
@@ -87,137 +105,169 @@ function TitlePage({ entries }: { entries: TitlePageEntry[] }) {
           </div>
         ))}
       </div>
-      {details.length > 0 ? (
-        <dl className="screenplay-title-details">
-          {details.map((entry) => (
-            <div key={`${entry.line}-${entry.key}`}>
-              <dt>{entry.key}</dt>
-              <dd>
-                <Lines values={entry.values} />
-              </dd>
-            </div>
-          ))}
-        </dl>
+      {foot.length > 0 ? (
+        <div className="screenplay-cover-foot">
+          <TitlePageEntries
+            entries={foot.filter(
+              (entry) => !RIGHT_FOOT_KEYS.has(entry.key.toLowerCase()),
+            )}
+          />
+          <TitlePageEntries
+            entries={foot.filter((entry) =>
+              RIGHT_FOOT_KEYS.has(entry.key.toLowerCase()),
+            )}
+            side="right"
+          />
+        </div>
       ) : null}
-    </header>
+    </section>
   );
 }
 
-function ScreenplayBody({ screenplay }: { screenplay: Screenplay }) {
-  const ids = getScreenplayHeadingIds(screenplay);
-
-  return screenplay.elements.map((element) => {
-    const key = `${element.line}-${element.type}`;
-
-    switch (element.type) {
-      case "section":
-        return (
-          <p
-            className="screenplay-section"
-            data-level={element.level}
-            data-markdown-heading
-            data-source-line={element.line}
-            id={ids.get(element)}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "scene-heading":
-        return (
-          <h3
-            className="screenplay-scene-heading"
-            data-markdown-heading
-            data-source-line={element.line}
-            id={ids.get(element)}
-            key={key}
-          >
-            {element.sceneNumber ? (
-              <span className="screenplay-scene-number">
-                {element.sceneNumber}
-              </span>
-            ) : null}
-            <Inline text={element.text} />
-          </h3>
-        );
-      case "action":
-        return (
-          <p
-            className="screenplay-action"
-            data-source-line={element.line}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "centered":
-        return (
-          <p
-            className="screenplay-centered"
-            data-source-line={element.line}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "lyrics":
-        return (
-          <p
-            className="screenplay-lyrics"
-            data-source-line={element.line}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "synopsis":
-        return (
-          <p
-            className="screenplay-synopsis"
-            data-source-line={element.line}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "transition":
-        return (
-          <p
-            className="screenplay-transition"
-            data-source-line={element.line}
-            key={key}
-          >
-            <Inline text={element.text} />
-          </p>
-        );
-      case "dialogue":
-        return <Dialogue block={element} key={key} />;
-      case "dual-dialogue":
-        return (
-          <div className="screenplay-dual-dialogue" key={key}>
-            <Dialogue block={element.left} />
-            <Dialogue block={element.right} />
-          </div>
-        );
-      case "page-break":
-        return (
-          <hr
-            aria-label="Page break"
-            className="screenplay-page-break"
-            data-source-line={element.line}
-            key={key}
-          />
-        );
-    }
-  });
+// Printed title pages carry values, not labels; the labels stay for screen
+// readers.
+function TitlePageEntries({
+  entries,
+  side = "left",
+}: {
+  entries: TitlePageEntry[];
+  side?: "left" | "right";
+}) {
+  return (
+    <dl data-side={side}>
+      {entries.map((entry) => (
+        <div key={`${entry.line}-${entry.key}`}>
+          <dt className="sr-only">{entry.key}</dt>
+          <dd>
+            <Lines values={entry.values} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
-function Dialogue({ block }: { block: DialogueBlock }) {
+// One printed page. Page one carries no number, as on a printed script.
+function Page({
+  ids,
+  page,
+}: {
+  ids: Map<ScreenplayElement, string>;
+  page: ScreenplayPage;
+}) {
+  return (
+    <section
+      aria-label={`Page ${page.number}`}
+      className="screenplay-page"
+      data-page={page.number}
+    >
+      {page.number > 1 ? (
+        <span aria-hidden="true" className="screenplay-page-number">
+          {page.number}.
+        </span>
+      ) : null}
+      <div className="screenplay-page-body">
+        {page.items.map((item, index) => (
+          <PageElement ids={ids} item={item} key={index} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PageElement({
+  ids,
+  item,
+}: {
+  ids: Map<ScreenplayElement, string>;
+  item: PageItem;
+}) {
+  const { element } = item;
+
+  switch (element.type) {
+    case "section":
+      return (
+        <p
+          className="screenplay-section"
+          data-level={element.level}
+          data-markdown-heading
+          data-source-line={element.line}
+          id={ids.get(element)}
+        >
+          <Inline text={element.text} />
+        </p>
+      );
+    case "scene-heading":
+      return (
+        <h3
+          className="screenplay-scene-heading"
+          data-markdown-heading
+          data-source-line={element.line}
+          id={ids.get(element)}
+        >
+          {element.sceneNumber ? (
+            <>
+              <span className="screenplay-scene-number" data-side="left">
+                {element.sceneNumber}
+              </span>
+              <span className="screenplay-scene-number" data-side="right">
+                {element.sceneNumber}
+              </span>
+            </>
+          ) : null}
+          <Inline text={element.text} />
+        </h3>
+      );
+    case "action":
+    case "centered":
+    case "lyrics":
+    case "synopsis":
+    case "transition":
+      return (
+        <p
+          className={`screenplay-${element.type}`}
+          data-source-line={element.line}
+        >
+          <Inline text={element.text} />
+        </p>
+      );
+    case "dialogue":
+      return (
+        <Dialogue block={element} continued={item.continued} more={item.more} />
+      );
+    case "dual-dialogue":
+      return (
+        <div className="screenplay-dual-dialogue">
+          <Dialogue block={element.left} />
+          <Dialogue block={element.right} />
+        </div>
+      );
+    case "page-break":
+      return null;
+  }
+}
+
+// A speech carried over from the previous page repeats its cue with
+// (CONT'D); one that carries on overleaf ends with (MORE).
+function Dialogue({
+  block,
+  continued = false,
+  more = false,
+}: {
+  block: DialogueBlock;
+  continued?: boolean;
+  more?: boolean;
+}) {
+  const extension =
+    continued && !/cont/i.test(block.extension)
+      ? `${block.extension} (CONT'D)`.trim()
+      : block.extension;
+
   return (
     <div className="screenplay-dialogue">
       <p className="screenplay-character">
         <Inline text={block.character} />
-        {block.extension ? <> {block.extension}</> : null}
+        {extension ? <> {extension}</> : null}
       </p>
       {block.runs.map((run) => (
         <p
@@ -228,6 +278,7 @@ function Dialogue({ block }: { block: DialogueBlock }) {
           <Inline text={run.text} />
         </p>
       ))}
+      {more ? <p className="screenplay-more">(MORE)</p> : null}
     </div>
   );
 }

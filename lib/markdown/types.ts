@@ -6,6 +6,8 @@ export type MarkdownBlock = { sourceLine: number } & (
   | {
       id: string;
       level: number;
+      // Screenplays only: the printed page the heading falls on.
+      page?: number;
       text: string;
       type: "heading";
     }
@@ -108,7 +110,8 @@ export type ReaderState = {
 export type DocumentStats = {
   lines: number;
   readingMinutes: number;
-  // Screenplays only: the number of scene headings.
+  // Screenplays only: printed pages and scene headings.
+  pages?: number;
   scenes?: number;
   words: number;
 };
