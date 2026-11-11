@@ -317,7 +317,7 @@ function SplitReaderPane({
   updateTab: UpdateReaderTab;
 }) {
   const file = tab.file;
-  const model = useReaderTabModel(tab);
+  const model = useReaderTabModel(tab, reader.tableRead);
 
   return (
     <Tabs

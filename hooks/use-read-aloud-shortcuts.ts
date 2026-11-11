@@ -2,17 +2,22 @@
 
 import { useEffect } from "react";
 
-import type { ReadAloudController } from "@/hooks/use-read-aloud";
+import type {
+  ReadAloudController,
+  ReadAloudScript,
+} from "@/hooks/use-read-aloud";
 import { isEditablePasteTarget } from "@/lib/markdown/document";
 
 export function useReadAloudShortcuts({
   activeTabId,
   chunks,
   reader,
+  script,
 }: {
   activeTabId: string;
   chunks: string[];
   reader: ReadAloudController;
+  script?: ReadAloudScript;
 }) {
   useEffect(() => {
     const sessionActive =
@@ -54,7 +59,7 @@ export function useReadAloudShortcuts({
           reader.resume();
         } else if (reader.status === "idle" && chunks.length > 0) {
           event.preventDefault();
-          reader.startFromSelection(chunks, activeTabId);
+          reader.startFromSelection(chunks, activeTabId, script);
         }
       }
     }
@@ -62,7 +67,7 @@ export function useReadAloudShortcuts({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeTabId, chunks, reader]);
+  }, [activeTabId, chunks, reader, script]);
 }
 
 function isReadAloudShortcutTarget(target: EventTarget | null) {

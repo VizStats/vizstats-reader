@@ -39,9 +39,12 @@ export function getScreenplayHeadingIds(screenplay: Screenplay) {
 // understand. Headings carry the printed text for the outline; `spoken` holds
 // the matching blocks with text phrased for a voice (INT. becomes Interior,
 // cues are announced once per speech, parentheticals are skipped).
+// In a table read each character has a voice of their own, so speeches are
+// not introduced by the speaker's name.
 export function getScreenplayBlocks(
   screenplay: Screenplay,
   pagination?: ScreenplayPagination,
+  tableRead = false,
 ) {
   const ids = getScreenplayHeadingIds(screenplay);
   const headings: HeadingBlock[] = [];
@@ -115,12 +118,12 @@ export function getScreenplayBlocks(
         );
         break;
       case "dialogue":
-        spoken.push(...getDialogueBlocks(element));
+        spoken.push(...getDialogueBlocks(element, tableRead));
         break;
       case "dual-dialogue":
         spoken.push(
-          ...getDialogueBlocks(element.left),
-          ...getDialogueBlocks(element.right),
+          ...getDialogueBlocks(element.left, tableRead),
+          ...getDialogueBlocks(element.right, tableRead),
         );
         break;
       case "page-break":
@@ -198,9 +201,13 @@ function getDialogueText(block: DialogueBlock) {
   return [block.character, ...block.runs.map((run) => run.text)];
 }
 
-function getDialogueBlocks(block: DialogueBlock): MarkdownBlock[] {
+function getDialogueBlocks(
+  block: DialogueBlock,
+  tableRead: boolean,
+): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
-  let announced = false;
+  const speaker = getSpeakerName(block.character);
+  let announced = tableRead;
 
   for (const run of block.runs) {
     if (run.type === "parenthetical") {
@@ -215,6 +222,7 @@ function getDialogueBlocks(block: DialogueBlock): MarkdownBlock[] {
 
     blocks.push({
       sourceLine: run.line,
+      speaker,
       text: announced ? text : `${speakName(block.character)}. ${text}`,
       type: "paragraph",
     });
@@ -222,6 +230,11 @@ function getDialogueBlocks(block: DialogueBlock): MarkdownBlock[] {
   }
 
   return blocks;
+}
+
+// One cast entry per character, however the cue is capitalised.
+export function getSpeakerName(character: string) {
+  return getFountainPlainText(character).trim().toUpperCase();
 }
 
 function pushParagraph(blocks: MarkdownBlock[], line: number, text: string) {

@@ -23,6 +23,7 @@ import {
 import {
   getReadAloudStatusText,
   type ReadAloudController,
+  type ReadAloudScript,
   type ReadAloudStatus,
 } from "@/hooks/use-read-aloud";
 import type { SpeechSection } from "@/lib/markdown/speech";
@@ -36,11 +37,14 @@ export function ReadAloudToolbar({
   onSelectSourceTab,
   className,
   controlIdPrefix = "read-aloud",
+  script,
 }: {
   reader: ReadAloudController;
   chunks: string[];
   sections: SpeechSection[];
   activeTabId: string;
+  // Present for screenplays: who speaks each passage, for the table read.
+  script?: ReadAloudScript;
   onSelectSourceTab: (tabId: string) => void;
   className?: string;
   controlIdPrefix?: string;
@@ -131,7 +135,7 @@ export function ReadAloudToolbar({
     if (canSeek) {
       reader.seek(chunkIndex);
     } else if (canRead) {
-      reader.start(chunks, activeTabId, chunkIndex);
+      reader.start(chunks, activeTabId, chunkIndex, script);
     }
   }
 
@@ -195,7 +199,8 @@ export function ReadAloudToolbar({
                   ? reader.pause
                   : isPaused
                     ? reader.resume
-                    : () => reader.startFromSelection(chunks, activeTabId)
+                    : () =>
+                        reader.startFromSelection(chunks, activeTabId, script)
               }
               size="icon-sm"
               type="button"
@@ -358,6 +363,7 @@ export function ReadAloudToolbar({
         controlIdPrefix={controlIdPrefix}
         onJumpToSection={jumpToSection}
         reader={reader}
+        script={script}
         sections={sections}
       />
     </div>

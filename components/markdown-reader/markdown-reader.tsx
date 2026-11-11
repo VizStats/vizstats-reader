@@ -30,7 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMarkdownFiles } from "@/hooks/use-markdown-files";
-import { useReadAloud } from "@/hooks/use-read-aloud";
+import { useReadAloud, type ReadAloudScript } from "@/hooks/use-read-aloud";
 import { useReadAloudShortcuts } from "@/hooks/use-read-aloud-shortcuts";
 import { useReaderSession } from "@/hooks/use-reader-session";
 import { useReaderTabModel } from "@/hooks/use-reader-tab-model";
@@ -126,15 +126,28 @@ export function MarkdownReader() {
       null
     );
   }, [activeTab.id, readerState.tabs, splitTabId]);
-  const activeModel = useReaderTabModel(activeTab);
   // Lifted here (instead of inside the toolbar) so playback survives tab
   // switches — MarkdownReader stays mounted while the toolbar remounts per tab.
   const reader = useReadAloud();
+  const activeModel = useReaderTabModel(activeTab, reader.tableRead);
+  // A screenplay's speakers and cast, for the table read.
+  const activeFile = activeTab.file;
+  const readAloudScript = useMemo<ReadAloudScript | undefined>(
+    () =>
+      activeFile?.kind === "screenplay"
+        ? {
+            castKey: activeFile.name,
+            speakers: activeModel.readAloudSpeakers,
+          }
+        : undefined,
+    [activeFile, activeModel.readAloudSpeakers],
+  );
 
   useReadAloudShortcuts({
     activeTabId: activeTab.id,
     chunks: activeModel.readAloudChunks,
     reader,
+    script: readAloudScript,
   });
 
   function editTabContent(tabId: string, content: string) {
@@ -467,6 +480,7 @@ export function MarkdownReader() {
               <ReadAloudToolbar
                 activeTabId={activeTab.id}
                 chunks={activeModel.readAloudChunks}
+                script={readAloudScript}
                 className="hidden min-w-0 flex-1 sm:flex"
                 onSelectSourceTab={selectTab}
                 reader={reader}
@@ -592,6 +606,7 @@ export function MarkdownReader() {
             <ReadAloudToolbar
               activeTabId={activeTab.id}
               chunks={activeModel.readAloudChunks}
+              script={readAloudScript}
               className="flex min-w-0 rounded-none border-x-0 border-b-0 px-2 sm:hidden"
               controlIdPrefix="mobile-read-aloud"
               onSelectSourceTab={selectTab}

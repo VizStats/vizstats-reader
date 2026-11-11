@@ -147,3 +147,39 @@ describe("screenplay pages", () => {
     expect(getScreenplayStats(screenplay, content, pagination).pages).toBe(2);
   });
 });
+
+describe("table read", () => {
+  const screenplay = parseFountain(
+    [
+      "INT. HOUSE - DAY",
+      "He waits.",
+      "@McClane\n(quietly)\nYippee.\nKi-yay.",
+      "BRICK\nScrew retirement.",
+      "STEEL ^\nScrew retirement.",
+    ].join("\n\n"),
+  );
+
+  it("marks who speaks each passage and leaves narration to the narrator", () => {
+    const { chunkSpeakers, chunks } = getReadableSpeech(
+      getScreenplayBlocks(screenplay, undefined, true).spoken,
+    );
+
+    expect(chunks).toEqual([
+      "Interior. House, day.",
+      "He waits.",
+      "Yippee. Ki-yay.",
+      "Screw retirement.",
+      "Screw retirement.",
+    ]);
+    expect(chunkSpeakers).toEqual([null, null, "MCCLANE", "BRICK", "STEEL"]);
+  });
+
+  it("announces speakers by name without a table read", () => {
+    const { chunkSpeakers, chunks } = getReadableSpeech(
+      getScreenplayBlocks(screenplay).spoken,
+    );
+
+    expect(chunks[2]).toBe("Mcclane. Yippee. Ki-yay.");
+    expect(chunkSpeakers[2]).toBe("MCCLANE");
+  });
+});

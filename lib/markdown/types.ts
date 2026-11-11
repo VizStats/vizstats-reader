@@ -14,6 +14,8 @@ export type MarkdownBlock = { sourceLine: number } & (
       type: "heading";
     }
   | {
+      // Screenplays only: the character who speaks this passage.
+      speaker?: string;
       text: string;
       type: "paragraph";
     }

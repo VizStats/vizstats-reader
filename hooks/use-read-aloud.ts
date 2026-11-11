@@ -6,13 +6,23 @@ import {
   loadDeviceVoices,
   rankDeviceVoices,
 } from "@/lib/speech/device-voices";
+import {
+  castDeviceVoices,
+  castNaturalVoices,
+  getCastCharacters,
+  type CastCharacter,
+  type CastOverrides,
+} from "@/lib/speech/cast";
 import { getKokoroEngine, isKokoroSupported } from "@/lib/speech/kokoro-engine";
 import {
   DEFAULT_KOKORO_VOICE,
   isKokoroVoiceId,
   type KokoroVoiceId,
 } from "@/lib/speech/kokoro-messages";
-import { getSelectedChunkIndex } from "@/lib/markdown/speech";
+import {
+  getSelectedChunkIndex,
+  type ChunkSpeaker,
+} from "@/lib/markdown/speech";
 
 export type ReadAloudStatus =
   | "idle"
@@ -24,6 +34,14 @@ export type ReadAloudStatus =
 export type ReadAloudEngine = "device" | "natural";
 
 const STORAGE_KEY = "markdown-reader:read-aloud";
+// Table-read casting, per document name, so reopening a script keeps its cast.
+const CAST_STORAGE_KEY = "markdown-reader:cast";
+
+// Who speaks each passage of a screenplay, and which document's cast applies.
+export type ReadAloudScript = {
+  castKey: string;
+  speakers: ChunkSpeaker[];
+};
 
 // How many passages the natural voice keeps generated ahead of the play head.
 // A small rolling buffer starts playback fastest and stays well within the
@@ -41,6 +59,7 @@ type StoredPrefs = {
   deviceVoiceURI?: string | null;
   kokoroVoice?: string;
   rate?: number;
+  tableRead?: boolean;
 };
 
 function readStoredPrefs(): StoredPrefs {
@@ -72,6 +91,45 @@ function writeStoredPrefs(partial: StoredPrefs) {
   }
 }
 
+function readStoredCasts(): Record<string, CastOverrides> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CAST_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, CastOverrides>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredCasts(casts: Record<string, CastOverrides>) {
+  try {
+    window.localStorage.setItem(CAST_STORAGE_KEY, JSON.stringify(casts));
+  } catch {
+    // Persistence is best-effort only.
+  }
+}
+
+// The chosen device voice, or the best-ranked one when none is chosen.
+function findDeviceVoice(
+  voices: SpeechSynthesisVoice[],
+  preferredURI: null | string,
+) {
+  return (
+    (preferredURI
+      ? voices.find((voice) => voice.voiceURI === preferredURI)
+      : undefined) ??
+    voices[0] ??
+    null
+  );
+}
+
 function subscribeToKokoroProgress(onStoreChange: () => void) {
   if (!isKokoroSupported()) {
     return () => undefined;
@@ -90,6 +148,10 @@ function getKokoroProgressServerSnapshot(): number | null {
 
 export function useReadAloud() {
   const chunksRef = useRef<string[]>([]);
+  // The playing script's speakers and cast list; empty outside screenplays.
+  const speakersRef = useRef<ChunkSpeaker[]>([]);
+  const charactersRef = useRef<CastCharacter[]>([]);
+  const castKeyRef = useRef<null | string>(null);
   const sessionRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -129,6 +191,10 @@ export function useReadAloud() {
       ? storedVoice
       : DEFAULT_KOKORO_VOICE;
   });
+  const [tableRead, setTableReadState] = useState(
+    () => readStoredPrefs().tableRead === true,
+  );
+  const [casts, setCasts] = useState(readStoredCasts);
   const modelProgress = useSyncExternalStore(
     subscribeToKokoroProgress,
     getKokoroProgressSnapshot,
@@ -140,8 +206,12 @@ export function useReadAloud() {
   const deviceVoicesRef = useRef(deviceVoices);
   const deviceVoiceURIRef = useRef(deviceVoiceURI);
   const kokoroVoiceRef = useRef(kokoroVoice);
+  const tableReadRef = useRef(tableRead);
+  const castsRef = useRef(casts);
 
   rateRef.current = rate;
+  tableReadRef.current = tableRead;
+  castsRef.current = casts;
   engineRef.current = engine;
   deviceVoicesRef.current = deviceVoices;
   deviceVoiceURIRef.current = deviceVoiceURI;
@@ -153,6 +223,7 @@ export function useReadAloud() {
     typeof SpeechSynthesisUtterance !== "undefined";
   const naturalSupported = isKokoroSupported();
   const engineSupported = engine === "device" ? deviceSupported : naturalSupported;
+  const narratorDeviceVoice = findDeviceVoice(deviceVoices, deviceVoiceURI);
   const status: ReadAloudStatus = engineSupported ? speechStatus : "unsupported";
 
   useEffect(() => {
@@ -234,21 +305,59 @@ export function useReadAloud() {
     setSpeechStatus("idle");
   }
 
-  function resolveDeviceVoice() {
-    const voices = deviceVoicesRef.current;
-    const preferredURI = deviceVoiceURIRef.current;
+  // The voice for one passage: in a table read, the speaking character's
+  // cast voice; otherwise, and for narration, the chosen narrator voice.
+  function getChunkSpeaker(index: number) {
+    return tableReadRef.current ? (speakersRef.current[index] ?? null) : null;
+  }
 
-    if (preferredURI) {
-      const preferred = voices.find(
-        (voice) => voice.voiceURI === preferredURI,
-      );
+  function getCastOverrides(): CastOverrides {
+    return castKeyRef.current ? (castsRef.current[castKeyRef.current] ?? {}) : {};
+  }
 
-      if (preferred) {
-        return preferred;
-      }
+  function resolveNaturalVoice(index: number): KokoroVoiceId {
+    const narrator = kokoroVoiceRef.current;
+    const speaker = getChunkSpeaker(index);
+
+    if (!speaker) {
+      return narrator;
     }
 
-    return voices[0] ?? null;
+    return (
+      castNaturalVoices(
+        charactersRef.current,
+        narrator,
+        getCastOverrides().natural,
+      )[speaker] ?? narrator
+    );
+  }
+
+  function resolveChunkDeviceVoice(index: number) {
+    const narrator = resolveDeviceVoice();
+    const speaker = getChunkSpeaker(index);
+
+    if (!speaker) {
+      return narrator;
+    }
+
+    const voiceURI = castDeviceVoices(
+      charactersRef.current,
+      deviceVoicesRef.current,
+      narrator,
+      getCastOverrides().device,
+    )[speaker];
+
+    return (
+      deviceVoicesRef.current.find((voice) => voice.voiceURI === voiceURI) ??
+      narrator
+    );
+  }
+
+  function resolveDeviceVoice() {
+    return findDeviceVoice(
+      deviceVoicesRef.current,
+      deviceVoiceURIRef.current,
+    );
   }
 
   function speakDeviceChunk(index: number, session: number) {
@@ -264,7 +373,7 @@ export function useReadAloud() {
     }
 
     const utterance = new SpeechSynthesisUtterance(readableChunks[index]);
-    const voice = resolveDeviceVoice();
+    const voice = resolveChunkDeviceVoice(index);
 
     if (voice) {
       utterance.voice = voice;
@@ -303,7 +412,7 @@ export function useReadAloud() {
     }
 
     const kokoro = getKokoroEngine();
-    const voice = kokoroVoiceRef.current;
+    const voice = resolveNaturalVoice(index);
     const cached = kokoro.getCached(readableChunks[index], voice);
 
     playbackIndexRef.current = index;
@@ -379,7 +488,7 @@ export function useReadAloud() {
         return;
       }
 
-      const voice = kokoroVoiceRef.current;
+      const voice = resolveNaturalVoice(index);
 
       if (!kokoro.getCached(readableChunks[index], voice)) {
         try {
@@ -426,12 +535,20 @@ export function useReadAloud() {
     }
   }
 
-  function start(readableChunks: string[], sourceId: string, startIndex = 0) {
+  function start(
+    readableChunks: string[],
+    sourceId: string,
+    startIndex = 0,
+    script?: ReadAloudScript,
+  ) {
     if (!readableChunks.length || !engineSupported) {
       return;
     }
 
     chunksRef.current = readableChunks;
+    speakersRef.current = script?.speakers ?? [];
+    charactersRef.current = getCastCharacters(speakersRef.current);
+    castKeyRef.current = script?.castKey ?? null;
     setSourceTabId(sourceId);
     setTotal(readableChunks.length);
     beginPlaybackAt(startIndex);
@@ -460,8 +577,17 @@ export function useReadAloud() {
     seek(targetIndex);
   }
 
-  function startFromSelection(readableChunks: string[], sourceId: string) {
-    start(readableChunks, sourceId, getSelectedChunkIndex(readableChunks) ?? 0);
+  function startFromSelection(
+    readableChunks: string[],
+    sourceId: string,
+    script?: ReadAloudScript,
+  ) {
+    start(
+      readableChunks,
+      sourceId,
+      getSelectedChunkIndex(readableChunks) ?? 0,
+      script,
+    );
   }
 
   function pause() {
@@ -539,6 +665,61 @@ export function useReadAloud() {
     writeStoredPrefs({ kokoroVoice: nextVoice });
   }
 
+  // Turning the table read on or off changes the passages themselves (names
+  // are announced only without it), so playback stops.
+  function setTableRead(nextTableRead: boolean) {
+    if (nextTableRead === tableReadRef.current) {
+      return;
+    }
+
+    stop();
+    setTableReadState(nextTableRead);
+    writeStoredPrefs({ tableRead: nextTableRead });
+  }
+
+  // The current engine's cast for a script: every speaking character, leads
+  // first, with the voice they will read in. A recast takes effect from the
+  // next passage, even mid-read.
+  function getCast(castKey: string, speakers: ChunkSpeaker[]) {
+    const characters = getCastCharacters(speakers);
+    const overrides = casts[castKey] ?? {};
+    const voices: Record<string, string> =
+      engine === "natural"
+        ? castNaturalVoices(characters, kokoroVoice, overrides.natural)
+        : castDeviceVoices(
+            characters,
+            deviceVoices,
+            narratorDeviceVoice,
+            overrides.device,
+          );
+
+    return { characters, voices };
+  }
+
+  function updateCast(
+    castKey: string,
+    update: (overrides: Record<string, string>) => Record<string, string>,
+  ) {
+    const engineKey = engineRef.current;
+    const current = castsRef.current[castKey] ?? {};
+    const next = {
+      ...castsRef.current,
+      [castKey]: { ...current, [engineKey]: update(current[engineKey] ?? {}) },
+    };
+
+    castsRef.current = next;
+    setCasts(next);
+    writeStoredCasts(next);
+  }
+
+  function setCharacterVoice(castKey: string, name: string, voice: string) {
+    updateCast(castKey, (overrides) => ({ ...overrides, [name]: voice }));
+  }
+
+  function resetCast(castKey: string) {
+    updateCast(castKey, () => ({}));
+  }
+
   return {
     bufferedIndex,
     currentIndex,
@@ -546,23 +727,29 @@ export function useReadAloud() {
     deviceVoiceURI,
     deviceVoices,
     engine,
+    getCast,
     kokoroVoice,
+    narratorDeviceVoice,
     modelProgress,
     naturalSupported,
     pause,
     rate,
+    resetCast,
     resume,
     seek,
     seekBy,
+    setCharacterVoice,
     setDeviceVoiceURI,
     setEngine,
     setKokoroVoice,
     setRate,
+    setTableRead,
     sourceTabId,
     start,
     startFromSelection,
     status,
     stop,
+    tableRead,
     total,
   };
 }

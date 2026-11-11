@@ -22,15 +22,21 @@ export function getReadableChunks(blocks: MarkdownBlock[]) {
 // it came from (the <li>/<tr>/<p>/heading), used to sync the reading highlight.
 type ChunkPiece = { line: number; text: string };
 
+// One entry per chunk: the screenplay character who speaks it, or null for
+// the narrator (and for every chunk of a Markdown document).
+export type ChunkSpeaker = null | string;
+
 // Flattens blocks into speech chunks and, in the same pass, records the chunk
 // index at which each heading's section begins and the source line of each chunk.
 export function getReadableSpeech(blocks: MarkdownBlock[]): {
   chunkLines: number[];
+  chunkSpeakers: ChunkSpeaker[];
   chunks: string[];
   sections: SpeechSection[];
 } {
   const chunks: string[] = [];
   const chunkLines: number[] = [];
+  const chunkSpeakers: ChunkSpeaker[] = [];
   const sections: SpeechSection[] = [];
 
   for (const block of blocks) {
@@ -48,10 +54,13 @@ export function getReadableSpeech(blocks: MarkdownBlock[]): {
     for (const piece of blockChunks) {
       chunks.push(piece.text);
       chunkLines.push(piece.line);
+      chunkSpeakers.push(
+        block.type === "paragraph" ? (block.speaker ?? null) : null,
+      );
     }
   }
 
-  return { chunkLines, chunks, sections };
+  return { chunkLines, chunkSpeakers, chunks, sections };
 }
 
 function getBlockChunks(block: MarkdownBlock): ChunkPiece[] {

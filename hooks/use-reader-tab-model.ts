@@ -12,6 +12,7 @@ import { parseFountain } from "@/lib/fountain/parse";
 import { parseMarkdown } from "@/lib/markdown/parse";
 import {
   getReadableSpeech,
+  type ChunkSpeaker,
   type SpeechSection,
 } from "@/lib/markdown/speech";
 import { getDocumentStats } from "@/lib/markdown/stats";
@@ -29,10 +30,14 @@ export type ReaderTabModel = {
   readAloudChunks: string[];
   readAloudChunkLines: number[];
   readAloudSections: SpeechSection[];
+  readAloudSpeakers: ChunkSpeaker[];
   stats: DocumentStats;
 };
 
-export function useReaderTabModel(tab: ReaderTab | null): ReaderTabModel {
+export function useReaderTabModel(
+  tab: ReaderTab | null,
+  tableRead = false,
+): ReaderTabModel {
   const content = tab?.file?.content ?? "";
   const isScreenplay = tab?.file?.kind === "screenplay";
   const activeHeadingId = tab?.activeHeadingId ?? null;
@@ -42,7 +47,11 @@ export function useReaderTabModel(tab: ReaderTab | null): ReaderTabModel {
     if (isScreenplay) {
       const screenplay = parseFountain(content);
       const pagination = paginateScreenplay(screenplay);
-      const { headings, spoken } = getScreenplayBlocks(screenplay, pagination);
+      const { headings, spoken } = getScreenplayBlocks(
+        screenplay,
+        pagination,
+        tableRead,
+      );
 
       return {
         blocks: spoken,
@@ -58,9 +67,10 @@ export function useReaderTabModel(tab: ReaderTab | null): ReaderTabModel {
       headings: blocks.filter((block) => block.type === "heading"),
       stats: getDocumentStats(content),
     };
-  }, [content, isScreenplay]);
+  }, [content, isScreenplay, tableRead]);
   const {
     chunkLines: readAloudChunkLines,
+    chunkSpeakers: readAloudSpeakers,
     chunks: readAloudChunks,
     sections: readAloudSections,
   } = useMemo(() => {
@@ -101,6 +111,7 @@ export function useReaderTabModel(tab: ReaderTab | null): ReaderTabModel {
     readAloudChunks,
     readAloudChunkLines,
     readAloudSections,
+    readAloudSpeakers,
     stats,
   };
 }
