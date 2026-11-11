@@ -1,5 +1,8 @@
 import { getFountainPlainText } from "@/lib/fountain/inline";
-import type { ScreenplayPagination } from "@/lib/fountain/paginate";
+import {
+  getEighths,
+  type ScreenplayPagination,
+} from "@/lib/fountain/paginate";
 import type {
   DialogueBlock,
   Screenplay,
@@ -75,7 +78,11 @@ export function getScreenplayBlocks(
             : Math.min(sectionLevel + 1, 6);
         const id = ids.get(element)!;
 
+        const sceneLines = pagination?.sceneLines.get(element);
+
         headings.push({
+          eighths:
+            sceneLines === undefined ? undefined : getEighths(sceneLines),
           id,
           level,
           page: pagination?.headingPages.get(element),

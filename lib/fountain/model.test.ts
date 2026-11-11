@@ -139,6 +139,11 @@ describe("screenplay pages", () => {
         (heading) => heading.page,
       ),
     ).toEqual([1, 2]);
+    expect(
+      getScreenplayBlocks(screenplay, pagination).headings.map(
+        (heading) => heading.eighths,
+      ),
+    ).toEqual([9, 1]);
     expect(getScreenplayStats(screenplay, content, pagination).pages).toBe(2);
   });
 });

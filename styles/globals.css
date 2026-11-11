@@ -718,6 +718,61 @@
     padding: 0 0.3ch;
   }
 
+  /* The printed script exists only while printing; see ScreenplayPrint. */
+  .screenplay-print {
+    font-family:
+      var(--font-screenplay), "Courier Prime", "Courier New", Courier,
+      monospace;
+  }
+
+  @media screen {
+    .screenplay-print {
+      display: none;
+    }
+  }
+
+  @media print {
+    body:has(> .screenplay-print) > :not(.screenplay-print) {
+      display: none !important;
+    }
+
+    /* One Letter sheet per page at true size: 12pt type, 1.5in left margin,
+       1in right, 1in top with the page number at 0.5in. */
+    .screenplay-print {
+      color: black;
+    }
+
+    .screenplay-print .screenplay-page {
+      background: white;
+      border-radius: 0;
+      box-shadow: none;
+      font-size: 12pt;
+      height: 11in;
+      margin: 0;
+      min-height: 0;
+      overflow: hidden;
+      padding: 1in 1in 0.5in 1.5in;
+      width: 8.5in;
+    }
+
+    .screenplay-print .screenplay-page:not(:last-child) {
+      break-after: page;
+    }
+
+    .screenplay-print .screenplay-page-number {
+      right: 1in;
+      top: 0.5in;
+    }
+
+    .screenplay-print .screenplay-scene-number {
+      color: inherit;
+    }
+
+    .screenplay-print .screenplay-note {
+      display: none;
+    }
+  }
+
   /* Too narrow for a true page: keep the pages and their breaks, reflow the
      text at a readable size. */
   @container (width < 32rem) {

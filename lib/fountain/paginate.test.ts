@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   countLines,
+  formatEighths,
+  getEighths,
   LINES_PER_PAGE,
   paginateScreenplay,
   splitText,
@@ -178,5 +180,60 @@ describe("splitText", () => {
     expect(splitText(text, 10, 3, true)).toMatchObject({
       head: "word word\\nword word\\nword word".replaceAll("\\n", " "),
     });
+  });
+});
+
+describe("scene lengths", () => {
+  it("counts each scene's printed lines, not the space a page turn leaves", () => {
+    const source = [
+      "INT. HOUSE - DAY",
+      ...actions(26),
+      "EXT. GARDEN - NIGHT",
+      "He leaves.\nSlowly.",
+    ].join("\n\n");
+    const screenplay = parseFountain(source);
+    const { sceneLines } = paginateScreenplay(screenplay);
+    const [house, garden] = screenplay.elements.filter(
+      (element) => element.type === "scene-heading",
+    );
+
+    // Heading + 26 paragraphs, each after a blank line.
+    expect(sceneLines.get(house!)).toBe(1 + 26 * 2);
+    // Moved to page 2 whole: heading, blank, two lines.
+    expect(sceneLines.get(garden!)).toBe(4);
+  });
+
+  it("includes a split speech's (MORE) line", () => {
+    const speech = Array.from(
+      { length: 8 },
+      (_, index) => `This is sentence number ${index + 1} of my speech.`,
+    ).join(" ");
+    const screenplay = parseFountain(
+      ["INT. HOUSE - DAY", ...actions(23), `BRICK\n${speech}`].join("\n\n"),
+    );
+    const { pages, sceneLines } = paginateScreenplay(screenplay);
+    const printed = pages
+      .flatMap((page) => page.items)
+      .filter((item) => item.element.type === "dialogue");
+
+    expect(printed).toHaveLength(2);
+    expect(sceneLines.get(screenplay.elements[0]!)).toBeGreaterThan(
+      LINES_PER_PAGE,
+    );
+  });
+});
+
+describe("eighths", () => {
+  it("rounds lines to eighths of a page, never below one", () => {
+    expect(getEighths(1)).toBe(1);
+    expect(getEighths(LINES_PER_PAGE)).toBe(8);
+    expect(getEighths(Math.round(LINES_PER_PAGE * 1.5))).toBe(12);
+  });
+
+  it("formats eighths the way a breakdown sheet does", () => {
+    expect(formatEighths(3)).toBe("3/8");
+    expect(formatEighths(8)).toBe("1");
+    expect(formatEighths(19)).toBe("2 3/8");
+    expect(formatEighths(4)).toBe("4/8");
   });
 });

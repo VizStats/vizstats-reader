@@ -10,6 +10,7 @@ import {
   FileSearch,
   LoaderCircle,
   PanelRightClose,
+  Printer,
   Upload,
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ import { DocumentImportOverlay } from "@/components/markdown-reader/document-imp
 import { PasteMarkdownDialog } from "@/components/markdown-reader/paste-dialog";
 import { ReadAloudToolbar } from "@/components/markdown-reader/read-aloud-toolbar";
 import { ReaderTabs } from "@/components/markdown-reader/reader-tabs";
+import { ScreenplayPrint } from "@/components/markdown-reader/screenplay-preview";
 import {
   CopySourceButton,
   EditPreviewButton,
@@ -532,6 +534,18 @@ export function MarkdownReader() {
                 >
                   <Download aria-hidden="true" />
                 </Button>
+                {file.kind === "screenplay" ? (
+                  <Button
+                    aria-label="Print or save as PDF"
+                    onClick={() => window.print()}
+                    size="icon"
+                    title="Print or save as PDF"
+                    type="button"
+                    variant="secondary"
+                  >
+                    <Printer aria-hidden="true" />
+                  </Button>
+                ) : null}
               </div>
 
               <div
@@ -660,6 +674,10 @@ export function MarkdownReader() {
           onCancel={cancelImport}
           progress={importProgress}
         />
+      ) : null}
+
+      {file?.kind === "screenplay" ? (
+        <ScreenplayPrint content={file.content} name={file.name} />
       ) : null}
 
       <PasteMarkdownDialog

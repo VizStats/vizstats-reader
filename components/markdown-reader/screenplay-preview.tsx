@@ -1,6 +1,14 @@
 "use client";
 
-import { Fragment, useMemo, useRef, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal, flushSync } from "react-dom";
 
 import { usePreviewTracking } from "@/hooks/use-preview-tracking";
 import {
@@ -30,6 +38,20 @@ const HEADLINE_KEYS = new Set([
   "source",
 ]);
 const RIGHT_FOOT_KEYS = new Set(["draft date", "date", "revision"]);
+const NO_IDS = new Map<ScreenplayElement, string>();
+const PRINT_PAGE_RULE = "@page { margin: 0; size: letter; }";
+
+function useScreenplayLayout(content: string) {
+  return useMemo(() => {
+    const screenplay = parseFountain(content);
+
+    return {
+      ids: getScreenplayHeadingIds(screenplay),
+      pages: paginateScreenplay(screenplay).pages,
+      screenplay,
+    };
+  }, [content]);
+}
 
 export function ScreenplayPreview({
   activeSourceLine = null,
@@ -41,15 +63,7 @@ export function ScreenplayPreview({
   onActiveHeadingChange: (headingId: string) => void;
 }) {
   const articleRef = useRef<HTMLElement>(null);
-  const { ids, pages, screenplay } = useMemo(() => {
-    const screenplay = parseFountain(content);
-
-    return {
-      ids: getScreenplayHeadingIds(screenplay),
-      pages: paginateScreenplay(screenplay).pages,
-      screenplay,
-    };
-  }, [content]);
+  const { ids, pages, screenplay } = useScreenplayLayout(content);
 
   usePreviewTracking(articleRef, {
     activeSourceLine,
@@ -78,6 +92,70 @@ export function ScreenplayPreview({
         <Page ids={ids} key={page.number} page={page} />
       ))}
     </article>
+  );
+}
+
+// The printed script, mounted only while the browser prints and placed
+// straight under <body>, so the print stylesheet can set it on Letter sheets
+// and hide the app around it. Covers Cmd/Ctrl+P as well as the print button.
+export function ScreenplayPrint({
+  content,
+  name,
+}: {
+  content: string;
+  name: string;
+}) {
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  useEffect(() => {
+    let appTitle: null | string = null;
+
+    const handleBeforePrint = () => {
+      appTitle ??= document.title;
+      // Browsers name a saved PDF after the page title.
+      document.title = name.replace(/\.(fountain|spmd)$/i, "");
+      flushSync(() => setIsPrinting(true));
+    };
+    const handleAfterPrint = () => {
+      setIsPrinting(false);
+
+      if (appTitle !== null) {
+        document.title = appTitle;
+        appTitle = null;
+      }
+    };
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+      handleAfterPrint();
+    };
+  }, [name]);
+
+  return isPrinting
+    ? createPortal(<PrintedScreenplay content={content} />, document.body)
+    : null;
+}
+
+// Sections, synopses and notes are the writer's own and stay off paper.
+function PrintedScreenplay({ content }: { content: string }) {
+  const { pages, screenplay } = useScreenplayLayout(content);
+
+  return (
+    <div className="screenplay-print">
+      {/* Margins live on each page, so the sheet itself has none. Scoped to
+          this element, it leaves printing other documents untouched. */}
+      <style>{PRINT_PAGE_RULE}</style>
+      {screenplay.titlePage.length > 0 ? (
+        <TitlePage entries={screenplay.titlePage} />
+      ) : null}
+      {pages.map((page) => (
+        <Page ids={NO_IDS} key={page.number} page={page} print />
+      ))}
+    </div>
   );
 }
 
@@ -151,10 +229,19 @@ function TitlePageEntries({
 function Page({
   ids,
   page,
+  print = false,
 }: {
   ids: Map<ScreenplayElement, string>;
   page: ScreenplayPage;
+  print?: boolean;
 }) {
+  const items = print
+    ? page.items.filter(
+        ({ element }) =>
+          element.type !== "section" && element.type !== "synopsis",
+      )
+    : page.items;
+
   return (
     <section
       aria-label={`Page ${page.number}`}
@@ -167,7 +254,7 @@ function Page({
         </span>
       ) : null}
       <div className="screenplay-page-body">
-        {page.items.map((item, index) => (
+        {items.map((item, index) => (
           <PageElement ids={ids} item={item} key={index} />
         ))}
       </div>

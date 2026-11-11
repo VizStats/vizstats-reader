@@ -44,6 +44,10 @@ export type ScreenplayPagination = {
   // The page each section and scene heading prints on, for the outline.
   headingPages: Map<ScreenplayElement, number>;
   pages: ScreenplayPage[];
+  // Printed lines each scene takes, from its heading to the next one,
+  // keyed by the scene heading. Space left blank by a page turn is not
+  // counted.
+  sceneLines: Map<ScreenplayElement, number>;
 };
 
 export function paginateScreenplay(
@@ -51,6 +55,8 @@ export function paginateScreenplay(
 ): ScreenplayPagination {
   const pages: ScreenplayPage[] = [];
   const headingPages = new Map<ScreenplayElement, number>();
+  const sceneLines = new Map<ScreenplayElement, number>();
+  let scene: ScreenplayElement | null = null;
   let items: PageItem[] = [];
   let used = 0;
   // Sections and synopses print nothing, so they wait for the next printed
@@ -64,11 +70,17 @@ export function paginateScreenplay(
       headingPages.set(waiting.element, pages.length + 1);
     }
 
+    const gap = used > 0 ? 1 : 0;
+
     if (item.element.type === "scene-heading") {
       headingPages.set(item.element, pages.length + 1);
+      scene = item.element;
+      sceneLines.set(scene, lines);
+    } else if (scene) {
+      sceneLines.set(scene, sceneLines.get(scene)! + gap + lines);
     }
 
-    used += (used > 0 ? 1 : 0) + lines;
+    used += gap + lines;
     items.push(...pending, item);
     pending = [];
   };
@@ -143,7 +155,7 @@ export function paginateScreenplay(
 
   turnPage();
 
-  return { headingPages, pages };
+  return { headingPages, pages, sceneLines };
 
   function placeAction(element: ScreenplayElement & { type: "action" }) {
     let text = element.text;
@@ -211,6 +223,23 @@ export function paginateScreenplay(
       continued = true;
     }
   }
+}
+
+// Production measures a scene in eighths of a page, never less than one.
+export function getEighths(lines: number) {
+  return Math.max(1, Math.round((lines * 8) / LINES_PER_PAGE));
+}
+
+// "2 3/8", "6/8", "1". Eighths stay unreduced, as on a breakdown sheet.
+export function formatEighths(eighths: number) {
+  const pages = Math.floor(eighths / 8);
+  const rest = eighths % 8;
+
+  if (pages === 0) {
+    return `${rest}/8`;
+  }
+
+  return rest === 0 ? `${pages}` : `${pages} ${rest}/8`;
 }
 
 // Lines an element takes on the page, without the blank line before it.

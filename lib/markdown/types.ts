@@ -6,7 +6,9 @@ export type MarkdownBlock = { sourceLine: number } & (
   | {
       id: string;
       level: number;
-      // Screenplays only: the printed page the heading falls on.
+      // Screenplays only: a scene's length in eighths of a page, and the
+      // printed page a heading falls on.
+      eighths?: number;
       page?: number;
       text: string;
       type: "heading";
