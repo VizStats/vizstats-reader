@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { hasFinalDraftExtension } from "@/lib/fountain/fdx";
 import { formatBytes, formatDate } from "@/lib/markdown/document";
 import type { DocumentStats, LoadedFile } from "@/lib/markdown/types";
 
@@ -38,16 +39,21 @@ export function FileSummary({
             {file.name}
           </p>
           <p className="truncate text-sm text-muted-foreground">
-            {formatBytes(file.size)} ·{" "}
-            {file.kind === "pdf"
-              ? [
-                  file.pageCount,
-                  file.pageCount === 1 ? "page" : "pages",
-                  "· imported",
-                ].join(" ")
-              : file.source === "paste"
-                ? "pasted"
-                : "edited"}{" "}
+            {file.kind === "screenplay" && hasFinalDraftExtension(file.name)
+              ? // A Final Draft script holds converted Fountain, whose size
+                // means nothing to the writer; where it came from does.
+                "Final Draft ·"
+              : `${formatBytes(file.size)} · ${
+                  file.kind === "pdf"
+                    ? [
+                        file.pageCount,
+                        file.pageCount === 1 ? "page" : "pages",
+                        "· imported",
+                      ].join(" ")
+                    : file.source === "paste"
+                      ? "pasted"
+                      : "edited"
+                }`}{" "}
             {formatDate(file.lastModified)}
           </p>
         </div>

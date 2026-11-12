@@ -58,7 +58,7 @@ function UploadDropZone({
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {[".md", ".mmd", ".fountain", ".pdf", "PDFs up to 25 MB", "Local only"].map((label) => (
+          {[".md", ".mmd", ".fountain", ".fdx", ".pdf", "PDFs up to 25 MB", "Local only"].map((label) => (
             <Badge
               className="border-[#8EA8AC]/35 bg-background/70 text-muted-foreground"
               key={label}

@@ -3,6 +3,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
+import { convertFinalDraftToFountain } from "@/lib/fountain/fdx";
 import {
   MAX_MARKDOWN_FILE_SIZE,
   MAX_OPEN_FILES,
@@ -12,6 +13,7 @@ import {
   createLoadedReaderTab,
   getDownloadFileName,
   getPastedDocumentName,
+  isFinalDraftFile,
   isFountainFile,
   isMermaidFile,
   isPdfFile,
@@ -99,7 +101,8 @@ export function useMarkdownFiles({
     if (candidates.length === 0) {
       if (isSingleSelection) {
         updateTab(activeTab.id, {
-          error: "Choose a Markdown, Mermaid, Fountain, or PDF document.",
+          error:
+            "Choose a Markdown, Mermaid, Fountain, Final Draft, or PDF document.",
         });
       } else {
         notifySkipped({
@@ -166,6 +169,21 @@ export function useMarkdownFiles({
             size: file.size,
             source: "file",
           } as const;
+
+          if (isFinalDraftFile(file)) {
+            const content = convertFinalDraftToFountain(text);
+
+            results.push({
+              loaded: {
+                ...fileDetails,
+                content,
+                kind: "screenplay",
+                size: new Blob([content]).size,
+              },
+              status: "ok",
+            });
+            continue;
+          }
 
           results.push({
             loaded: isFountainFile(file)
@@ -467,7 +485,7 @@ function getSingleFileError(
       return "This PDF is larger than 25 MB. Try a smaller document.";
     }
 
-    return file && isFountainFile(file)
+    return file && (isFountainFile(file) || isFinalDraftFile(file))
       ? "This screenplay is larger than 5 MB. Try a smaller file."
       : "This file is larger than 5 MB. Try a smaller Markdown file.";
   }
@@ -482,6 +500,10 @@ function getSingleFileError(
 
   if (status === "cancelled") {
     return "Document import was cancelled.";
+  }
+
+  if (file && isFinalDraftFile(file)) {
+    return "This Final Draft file could not be read. Save it again from Final Draft and reopen it.";
   }
 
   return "The document could not be read. Try exporting it again.";

@@ -1,3 +1,4 @@
+import { hasFinalDraftExtension } from "@/lib/fountain/fdx";
 import { hasFountainExtension } from "@/lib/fountain/parse";
 import { hasMermaidExtension } from "@/lib/markdown/mermaid";
 import { toPlainSpeechText } from "@/lib/markdown/speech";
@@ -31,6 +32,11 @@ export function isFountainFile(file: File) {
   return hasFountainExtension(file.name);
 }
 
+// Final Draft scripts open as screenplays, converted to Fountain on import.
+export function isFinalDraftFile(file: File) {
+  return hasFinalDraftExtension(file.name);
+}
+
 export function isPdfFile(file: File) {
   return (
     file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf"
@@ -42,6 +48,7 @@ export function isSupportedDocumentFile(file: File) {
     isMarkdownFile(file) ||
     isMermaidFile(file) ||
     isFountainFile(file) ||
+    isFinalDraftFile(file) ||
     isPdfFile(file)
   );
 }
@@ -232,7 +239,9 @@ export function normalizeDocumentName(
   }
 
   if (kind === "screenplay") {
-    return hasFountainExtension(safeName) ? safeName : `${safeName}.fountain`;
+    return hasFountainExtension(safeName) || hasFinalDraftExtension(safeName)
+      ? safeName
+      : `${safeName}.fountain`;
   }
 
   return safeName.toLowerCase().endsWith(".pdf")
@@ -241,7 +250,7 @@ export function normalizeDocumentName(
 }
 
 // Turns a document name into a safe filename for downloading. Screenplays
-// download as the Fountain text they hold. Everything else guarantees a
+// download as the Fountain text they hold, Final Draft scripts included. Everything else guarantees a
 // markdown extension so the saved file opens as markdown: PDF and Mermaid
 // documents hold converted Markdown, so their source extension is dropped.
 export function getDownloadFileName(
@@ -249,7 +258,10 @@ export function getDownloadFileName(
   kind: LoadedFile["kind"] = "markdown",
 ) {
   if (kind === "screenplay") {
-    return normalizeDocumentName(name, "screenplay") ?? "screenplay.fountain";
+    return (
+      normalizeDocumentName(name.replace(/\.fdx$/i, ""), "screenplay") ??
+      "screenplay.fountain"
+    );
   }
 
   const withoutSourceExtension = name.replace(/\.(pdf|mmd|mermaid)$/i, "");

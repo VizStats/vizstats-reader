@@ -49,7 +49,7 @@ export function hasFountainExtension(name: string) {
   );
 }
 
-const SCENE_HEADING = /^(?:int\.?\/ext|int\/ext|i\/e|int|ext|est)[.\s]/i;
+export const SCENE_HEADING = /^(?:int\.?\/ext|int\/ext|i\/e|int|ext|est)[.\s]/i;
 const SCENE_NUMBER = /\s*#([\w.-]+)#\s*$/;
 const PAGE_BREAK = /^\s*={3,}\s*$/;
 const SECTION = /^\s*(#+)\s*(.*)$/;

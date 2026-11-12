@@ -8,6 +8,7 @@ import {
   getPastedDocumentName,
   getReaderTabLabel,
   getReaderViewForValue,
+  isFinalDraftFile,
   isFountainFile,
   isMarkdownFile,
   isMermaidFile,
@@ -216,6 +217,14 @@ describe("Fountain document detection", () => {
   it("rejects other files", () => {
     expect(isFountainFile(new File([""], "pilot.md"))).toBe(false);
   });
+
+  it("opens Final Draft scripts as screenplays", () => {
+    const file = new File([""], "Pilot.FDX", { type: "application/xml" });
+
+    expect(isFinalDraftFile(file)).toBe(true);
+    expect(isFountainFile(file)).toBe(false);
+    expect(isSupportedDocumentFile(file)).toBe(true);
+  });
 });
 
 describe("getReaderViewForValue", () => {
@@ -317,6 +326,9 @@ describe("getDownloadFileName", () => {
     expect(getDownloadFileName("///", "screenplay")).toBe(
       "screenplay.fountain",
     );
+    expect(getDownloadFileName("Pilot.FDX", "screenplay")).toBe(
+      "Pilot.fountain",
+    );
   });
 
   it("downloads Mermaid documents as the Markdown they hold", () => {
@@ -370,6 +382,9 @@ describe("normalizeDocumentName", () => {
     );
     expect(normalizeDocumentName("Pilot.spmd", "screenplay")).toBe(
       "Pilot.spmd",
+    );
+    expect(normalizeDocumentName("Pilot v2.fdx", "screenplay")).toBe(
+      "Pilot v2.fdx",
     );
   });
 });

@@ -114,7 +114,7 @@ export function ScreenplayPrint({
     const handleBeforePrint = () => {
       appTitle ??= document.title;
       // Browsers name a saved PDF after the page title.
-      document.title = name.replace(/\.(fountain|spmd)$/i, "");
+      document.title = name.replace(/\.(fountain|spmd|fdx)$/i, "");
       flushSync(() => setIsPrinting(true));
     };
     const handleAfterPrint = () => {

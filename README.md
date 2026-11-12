@@ -27,10 +27,10 @@
 
 ## Features
 
-- 🗂️ **Tabbed documents** — open multiple Markdown, Fountain, and PDF files at once, browser-style.
-- 📥 **Multiple inputs** — choose or drop Markdown, Fountain, and PDF files, or paste Markdown (dialog or ⌘/Ctrl + V).
+- 🗂️ **Tabbed documents** — open multiple Markdown, Fountain, Final Draft, and PDF files at once, browser-style.
+- 📥 **Multiple inputs** — choose or drop Markdown, Fountain, Final Draft, and PDF files, or paste Markdown (dialog or ⌘/Ctrl + V).
 - 🧜 **Mermaid diagrams** — ` ```mermaid ` code blocks render as themed diagrams with a code toggle; `.mmd` / `.mermaid` files open as diagram documents.
-- 🎬 **Screenplays** — `.fountain` / `.spmd` files render as printed script pages with a title page, page numbers, and an estimated runtime; print or save them as a standard script PDF; and see each scene's length in eighths of a page in the outline, alongside a table read with a voice for each character, line flags set while listening, and side-by-side editing.
+- 🎬 **Screenplays** — `.fountain` / `.spmd` and Final Draft `.fdx` files render as printed script pages with a title page, page numbers, and an estimated runtime; print or save them as a standard script PDF; and see each scene's length in eighths of a page in the outline, alongside a table read with a voice for each character, line flags set while listening, and side-by-side editing.
 - 📄 **PDF reading** — extract text into a reflowable reader and switch to the locally rendered original pages when layout matters.
 - 👀 **Document views** — toggle between rendered Markdown and source, or between a reflowed PDF reader and original PDF pages.
 - ✍️ **Editable preview** — switch the rendered preview into a Markdown-native rich editor with formatting controls.
@@ -45,6 +45,8 @@ Markdown is rendered with [react-markdown](https://github.com/remarkjs/react-mar
 Mermaid diagrams render in the browser with [Mermaid](https://mermaid.js.org), loaded only when a document contains one. Diagrams render at Mermaid's `strict` security level (label HTML sanitized, click callbacks disabled) and follow the light/dark theme. A `.mmd` or `.mermaid` file opens as a Markdown document holding one `mermaid` block and downloads as `.md`.
 
 Fountain screenplays are parsed in the browser by the reader's own parser (`lib/fountain/`), covering the [Fountain syntax](https://fountain.io/syntax): title page, scene headings and numbers, character cues and extensions, parentheticals, dual dialogue, transitions, centered text, lyrics, emphasis, sections, synopses, notes, boneyard, and page breaks. Sections and scene headings form the outline, each with its page number, and each scene with its length in eighths of a page, the unit production schedules use; sections, synopses, and notes show as annotations rather than script.
+
+Final Draft scripts (`.fdx`) are converted to Fountain as they open (`lib/fountain/fdx.ts`), so every screenplay feature works on them: scene headings with their scene numbers, action, character cues, parentheticals, dialogue, dual dialogue, transitions, centered text, bold, italic and underline, page breaks, and scene summaries as synopses, following the script's own element settings for capitals, centering and new pages. The title page is keyed by its layout: centered text gives the title, credit, authors and source, draft lines and right-aligned text the draft date, and left-aligned text the contact block. Final Draft's script notes, revision marks and tagging are not carried over. Edits and flags save to the Fountain copy, which downloads as `.fountain`; the original `.fdx` is never changed.
 
 Screenplays are laid out as printed pages (`lib/fountain/paginate.ts`): US Letter in 12pt Courier, 55 lines to the page, the page behind the one-page-per-minute rule, so the page count doubles as a runtime estimate. The title page prints on its own unnumbered cover, and body pages are numbered from page 2. Page breaks follow the industry conventions: a scene heading never ends a page, action splits only after a sentence with at least two lines on each side, and a speech that splits ends with (MORE) and resumes under its cue with (CONT'D). Wide columns show the page at true proportions; narrow ones keep the page breaks and reflow the text.
 
