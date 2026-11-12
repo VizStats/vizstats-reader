@@ -53,6 +53,6 @@ describe("parseFountainInline", () => {
 
 describe("getFountainPlainText", () => {
   it("drops markup and notes", () => {
-    expect(getFountainPlainText("**Run**, _now_! [[cut?]]")).toBe("Run, now! ");
+    expect(getFountainPlainText("**Run**, _now_! [[cut?]]")).toBe("Run, now!");
   });
 });

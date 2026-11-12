@@ -15,6 +15,7 @@ import {
   parseFountainInline,
   type FountainInline,
 } from "@/lib/fountain/inline";
+import { FLAG_NOTE } from "@/lib/fountain/flags";
 import { getScreenplayHeadingIds } from "@/lib/fountain/model";
 import {
   paginateScreenplay,
@@ -390,7 +391,14 @@ function renderInline(nodes: FountainInline[]): ReactNode {
         return <Fragment key={index}>{node.value}</Fragment>;
       case "note":
         return (
-          <span className="screenplay-note" key={index} title="Note">
+          <span
+            className="screenplay-note"
+            data-flag={`[[${node.value}]]` === FLAG_NOTE ? "" : undefined}
+            key={index}
+            title={
+              `[[${node.value}]]` === FLAG_NOTE ? "Flagged line" : "Note"
+            }
+          >
             {node.value}
           </span>
         );

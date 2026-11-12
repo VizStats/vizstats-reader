@@ -718,6 +718,17 @@
     padding: 0 0.3ch;
   }
 
+  /* A line flagged during a read-aloud: the note the writer comes back to. */
+  .screenplay-note[data-flag] {
+    background: color-mix(in oklab, var(--core-teal) 30%, transparent);
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .screenplay-note[data-flag]::before {
+    content: "\2691\00a0";
+  }
+
   /* The printed script exists only while printing; see ScreenplayPrint. */
   .screenplay-print {
     font-family:

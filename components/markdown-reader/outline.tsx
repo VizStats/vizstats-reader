@@ -1,6 +1,6 @@
 "use client";
 
-import { ListTree } from "lucide-react";
+import { Flag, ListTree } from "lucide-react";
 
 import { formatEighths } from "@/lib/fountain/paginate";
 import type { HeadingBlock } from "@/lib/markdown/types";
@@ -57,6 +57,21 @@ export function Outline({
                 }}
               >
                 <span className="min-w-0 flex-1 truncate">{heading.text}</span>
+                {heading.flags ? (
+                  <span
+                    className="flex shrink-0 items-center gap-0.5 self-center text-xs tabular-nums text-[#03444A] dark:text-[#58D1E2]"
+                    title={`${heading.flags} flagged ${
+                      heading.flags === 1 ? "line" : "lines"
+                    }`}
+                  >
+                    <Flag aria-hidden="true" className="size-3 fill-current" />
+                    <span className="sr-only">
+                      {heading.flags} flagged{" "}
+                      {heading.flags === 1 ? "line" : "lines"}
+                    </span>
+                    <span aria-hidden="true">{heading.flags}</span>
+                  </span>
+                ) : null}
                 {showLengths ? (
                   <span
                     aria-label={

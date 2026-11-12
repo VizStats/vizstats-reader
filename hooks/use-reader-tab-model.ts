@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 
 import type { ReadAloudController } from "@/hooks/use-read-aloud";
+import { FLAG_NOTE, getFlagLines } from "@/lib/fountain/flags";
+import { getCharacterGenders } from "@/lib/fountain/genders";
 import {
   getScreenplayBlocks,
   getScreenplayStats,
@@ -22,17 +24,27 @@ import type {
   MarkdownBlock,
   ReaderTab,
 } from "@/lib/markdown/types";
+import type { CharacterGender } from "@/lib/speech/cast";
 
 export type ReaderTabModel = {
   blocks: MarkdownBlock[];
+  // Screenplays only: each speaking character's gender, where the script
+  // gives it, for casting the table read.
+  castGenders: Record<string, CharacterGender>;
   headings: HeadingBlock[];
   outlineActiveHeadingId: null | string;
   readAloudChunks: string[];
   readAloudChunkLines: number[];
+  // Screenplays only: per passage, the line its flag goes on and whether it
+  // is flagged, or null where a passage cannot be flagged.
+  readAloudFlagLines: (null | number)[];
+  readAloudFlags: (boolean | null)[];
   readAloudSections: SpeechSection[];
   readAloudSpeakers: ChunkSpeaker[];
   stats: DocumentStats;
 };
+
+const NO_GENDERS: Record<string, CharacterGender> = {};
 
 export function useReaderTabModel(
   tab: ReaderTab | null,
@@ -43,7 +55,7 @@ export function useReaderTabModel(
   const activeHeadingId = tab?.activeHeadingId ?? null;
   // Screenplays map onto the same block model: headings drive the outline and
   // spoken blocks drive read-aloud, so both features work unchanged.
-  const { blocks, headings, stats } = useMemo(() => {
+  const { blocks, castGenders, flagLines, headings, stats } = useMemo(() => {
     if (isScreenplay) {
       const screenplay = parseFountain(content);
       const pagination = paginateScreenplay(screenplay);
@@ -55,6 +67,8 @@ export function useReaderTabModel(
 
       return {
         blocks: spoken,
+        castGenders: getCharacterGenders(screenplay),
+        flagLines: getFlagLines(screenplay, content),
         headings,
         stats: getScreenplayStats(screenplay, content, pagination),
       };
@@ -64,6 +78,8 @@ export function useReaderTabModel(
 
     return {
       blocks,
+      castGenders: NO_GENDERS,
+      flagLines: null,
       headings: blocks.filter((block) => block.type === "heading"),
       stats: getDocumentStats(content),
     };
@@ -93,6 +109,21 @@ export function useReaderTabModel(
       })),
     };
   }, [blocks, headings, isScreenplay]);
+  const { readAloudFlagLines, readAloudFlags } = useMemo(() => {
+    const sourceLines = flagLines ? content.split("\n") : [];
+    const lines = readAloudChunkLines.map(
+      (line) => flagLines?.get(line) ?? null,
+    );
+
+    return {
+      readAloudFlagLines: lines,
+      readAloudFlags: lines.map((line) =>
+        line === null
+          ? null
+          : (sourceLines[line - 1]?.includes(FLAG_NOTE) ?? false),
+      ),
+    };
+  }, [content, flagLines, readAloudChunkLines]);
   const outlineActiveHeadingId = useMemo(() => {
     if (
       activeHeadingId &&
@@ -106,10 +137,13 @@ export function useReaderTabModel(
 
   return {
     blocks,
+    castGenders,
     headings,
     outlineActiveHeadingId,
     readAloudChunks,
     readAloudChunkLines,
+    readAloudFlagLines,
+    readAloudFlags,
     readAloudSections,
     readAloudSpeakers,
     stats,

@@ -3,6 +3,7 @@
 import type { KeyboardEvent } from "react";
 
 import {
+  Flag,
   Loader2,
   Music,
   Pause,
@@ -92,6 +93,16 @@ export function ReadAloudToolbar({
   const canSeek = isSource && sessionActive && localTotal > 0;
   const atStart = reader.currentIndex <= 0;
   const atEnd = reader.currentIndex >= localTotal - 1;
+  // Screenplays: whether the line being read is flagged, or null where the
+  // passage cannot take a flag (a title page, a section, "CUT TO:").
+  const flagState = canSeek ? (script?.flags[reader.currentIndex] ?? null) : null;
+  const flagLabel = !canSeek
+    ? "Flag lines while the script is read aloud"
+    : flagState === null
+      ? "This passage can\u2019t take a flag"
+      : flagState
+        ? "Remove the flag (F)"
+        : "Flag this line (F)";
 
   function seekToClientX(clientX: number, rect: DOMRect) {
     if (rect.width <= 0 || localTotal <= 0) {
@@ -265,6 +276,38 @@ export function ReadAloudToolbar({
         </TooltipTrigger>
         <TooltipContent>Stop</TooltipContent>
       </Tooltip>
+
+      {script ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                aria-keyshortcuts="F"
+                aria-label={flagState ? "Remove the flag" : "Flag this line"}
+                aria-pressed={flagState === true}
+                className="size-7 shrink-0 rounded-full data-disabled:opacity-50 data-disabled:hover:bg-transparent"
+                disabled={flagState === null}
+                // Stays hoverable while disabled, so its tooltip can say how
+                // flagging works.
+                focusableWhenDisabled
+                onClick={() => script.onToggleFlag(reader.currentIndex)}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              />
+            }
+          >
+            <Flag
+              aria-hidden="true"
+              className={cn(
+                flagState &&
+                  "fill-current text-[#03444A] dark:text-[#58D1E2]",
+              )}
+            />
+          </TooltipTrigger>
+          <TooltipContent>{flagLabel}</TooltipContent>
+        </Tooltip>
+      ) : null}
 
       {/* Progress fills the reclaimed space */}
       <div className="flex min-w-0 flex-1 items-center gap-2">

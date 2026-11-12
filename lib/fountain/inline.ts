@@ -83,9 +83,13 @@ export function parseFountainInline(text: string): FountainInline[] {
 }
 
 // The plain words of a line of Fountain, for speech and word counts. Notes are
-// writer annotations, not part of the script, so they are left out.
+// writer annotations, not part of the script, so they are left out, along
+// with the space a note at the end of a line leaves behind.
 export function getFountainPlainText(text: string): string {
-  return parseFountainInline(text).map(getNodeText).join("");
+  return parseFountainInline(text)
+    .map(getNodeText)
+    .join("")
+    .replace(/[ \t]+$/gm, "");
 }
 
 function getNodeText(node: FountainInline): string {

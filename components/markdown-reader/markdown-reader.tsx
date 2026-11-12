@@ -34,6 +34,7 @@ import { useReadAloud, type ReadAloudScript } from "@/hooks/use-read-aloud";
 import { useReadAloudShortcuts } from "@/hooks/use-read-aloud-shortcuts";
 import { useReaderSession } from "@/hooks/use-reader-session";
 import { useReaderTabModel } from "@/hooks/use-reader-tab-model";
+import { toggleLineFlag } from "@/lib/fountain/flags";
 import { ACCEPTED_FILE_TYPES } from "@/lib/markdown/constants";
 import {
   createReaderTab,
@@ -132,15 +133,40 @@ export function MarkdownReader() {
   const activeModel = useReaderTabModel(activeTab, reader.tableRead);
   // A screenplay's speakers and cast, for the table read.
   const activeFile = activeTab.file;
+  const activeTabId = activeTab.id;
+  const {
+    castGenders,
+    readAloudFlagLines,
+    readAloudFlags,
+    readAloudSpeakers,
+  } = activeModel;
   const readAloudScript = useMemo<ReadAloudScript | undefined>(
     () =>
       activeFile?.kind === "screenplay"
         ? {
             castKey: activeFile.name,
-            speakers: activeModel.readAloudSpeakers,
+            flags: readAloudFlags,
+            genders: castGenders,
+            onToggleFlag: (index) => {
+              const line = readAloudFlagLines[index];
+
+              if (line != null) {
+                toggleTabFlag(activeTabId, line);
+              }
+            },
+            speakers: readAloudSpeakers,
           }
         : undefined,
-    [activeFile, activeModel.readAloudSpeakers],
+    // toggleTabFlag reads the session's latest state when called.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      activeFile,
+      activeTabId,
+      castGenders,
+      readAloudFlagLines,
+      readAloudFlags,
+      readAloudSpeakers,
+    ],
   );
 
   useReadAloudShortcuts({
@@ -174,6 +200,34 @@ export function MarkdownReader() {
             content,
             lastModified: Date.now(),
             size,
+          },
+        };
+      }),
+    });
+  }
+
+  // Flags a line while the script is read aloud. Unlike an edit, it keeps the
+  // read going and the outline where it is: a flag is a note, so the spoken
+  // passages stay the same.
+  function toggleTabFlag(tabId: string, line: number) {
+    const currentState = getCurrentReaderState();
+
+    commitReaderState({
+      ...currentState,
+      tabs: currentState.tabs.map((tab) => {
+        if (tab.id !== tabId || tab.file?.kind !== "screenplay") {
+          return tab;
+        }
+
+        const content = toggleLineFlag(tab.file.content, line);
+
+        return {
+          ...tab,
+          file: {
+            ...tab.file,
+            content,
+            lastModified: Date.now(),
+            size: new Blob([content]).size,
           },
         };
       }),

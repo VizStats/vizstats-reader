@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   NativeSelect,
+  NativeSelectOptGroup,
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import {
@@ -27,9 +28,16 @@ import type {
   ReadAloudScript,
 } from "@/hooks/use-read-aloud";
 import type { SpeechSection } from "@/lib/markdown/speech";
-import { getCastableDeviceVoices } from "@/lib/speech/cast";
+import {
+  getCastableDeviceVoices,
+  getDeviceVoiceGender,
+} from "@/lib/speech/cast";
 import { isNaturalSoundingVoice } from "@/lib/speech/device-voices";
-import { KOKORO_VOICES } from "@/lib/speech/kokoro-messages";
+import {
+  getKokoroVoiceLabel,
+  isKokoroVoiceId,
+  KOKORO_VOICES,
+} from "@/lib/speech/kokoro-messages";
 import { cn } from "@/lib/utils";
 
 export function ReadAloudOptions({
@@ -53,7 +61,7 @@ export function ReadAloudOptions({
   const rateControlId = `${controlIdPrefix}-rate`;
   const voiceControlId = `${controlIdPrefix}-voice`;
   const tableReadLabelId = `${controlIdPrefix}-table-read`;
-  const cast = script ? reader.getCast(script.castKey, script.speakers) : null;
+  const cast = script ? reader.getCast(script) : null;
   const hasCast = Boolean(cast && cast.characters.length > 0);
   const isTableRead = hasCast && reader.tableRead;
 
@@ -216,22 +224,16 @@ export function ReadAloudOptions({
                 className="w-full"
                 id={voiceControlId}
                 onChange={(event) => {
-                  const voice = KOKORO_VOICES.find(
-                    (candidate) => candidate.id === event.currentTarget.value,
-                  );
+                  const voice = event.currentTarget.value;
 
-                  if (voice) {
-                    reader.setKokoroVoice(voice.id);
+                  if (isKokoroVoiceId(voice)) {
+                    reader.setKokoroVoice(voice);
                   }
                 }}
                 size="sm"
                 value={reader.kokoroVoice}
               >
-                {KOKORO_VOICES.map((voice) => (
-                  <NativeSelectOption key={voice.id} value={voice.id}>
-                    {voice.label}
-                  </NativeSelectOption>
-                ))}
+                <NaturalVoiceOptions />
               </NativeSelect>
             )}
           </div>
@@ -314,6 +316,50 @@ export function ReadAloudOptions({
   );
 }
 
+const VOICE_GROUPS = [
+  { gender: "female", label: "Female" },
+  { gender: "male", label: "Male" },
+] as const;
+
+function NaturalVoiceOptions() {
+  return VOICE_GROUPS.map((group) => (
+    <NativeSelectOptGroup key={group.gender} label={group.label}>
+      {KOKORO_VOICES.filter((voice) => voice.gender === group.gender).map(
+        (voice) => (
+          <NativeSelectOption key={voice.id} value={voice.id}>
+            {getKokoroVoiceLabel(voice)}
+          </NativeSelectOption>
+        ),
+      )}
+    </NativeSelectOptGroup>
+  ));
+}
+
+// Device voices grouped as female, male, and voices whose name does not say.
+function DeviceVoiceOptions({ voices }: { voices: SpeechSynthesisVoice[] }) {
+  const groups = [
+    ...VOICE_GROUPS,
+    { gender: undefined, label: "Other" },
+  ].map((group) => ({
+    ...group,
+    voices: voices.filter(
+      (voice) => getDeviceVoiceGender(voice) === group.gender,
+    ),
+  }));
+
+  return groups
+    .filter((group) => group.voices.length > 0)
+    .map((group) => (
+      <NativeSelectOptGroup key={group.label} label={group.label}>
+        {group.voices.map((voice) => (
+          <NativeSelectOption key={voice.voiceURI} value={voice.voiceURI}>
+            {voice.name}
+          </NativeSelectOption>
+        ))}
+      </NativeSelectOptGroup>
+    ));
+}
+
 // A character's voice, from the current engine's voices. Device voices are
 // limited to the narrator's language, without the novelty voices.
 function CastVoiceSelect({
@@ -347,17 +393,11 @@ function CastVoiceSelect({
       size="sm"
       value={value}
     >
-      {reader.engine === "natural"
-        ? KOKORO_VOICES.map((voice) => (
-            <NativeSelectOption key={voice.id} value={voice.id}>
-              {voice.label}
-            </NativeSelectOption>
-          ))
-        : deviceVoices.map((voice) => (
-            <NativeSelectOption key={voice.voiceURI} value={voice.voiceURI}>
-              {voice.name}
-            </NativeSelectOption>
-          ))}
+      {reader.engine === "natural" ? (
+        <NaturalVoiceOptions />
+      ) : (
+        <DeviceVoiceOptions voices={deviceVoices} />
+      )}
     </NativeSelect>
   );
 }

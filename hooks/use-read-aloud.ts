@@ -10,8 +10,10 @@ import {
   castDeviceVoices,
   castNaturalVoices,
   getCastCharacters,
+  getSharedVoicePitches,
   type CastCharacter,
   type CastOverrides,
+  type CharacterGender,
 } from "@/lib/speech/cast";
 import { getKokoroEngine, isKokoroSupported } from "@/lib/speech/kokoro-engine";
 import {
@@ -40,6 +42,12 @@ const CAST_STORAGE_KEY = "markdown-reader:cast";
 // Who speaks each passage of a screenplay, and which document's cast applies.
 export type ReadAloudScript = {
   castKey: string;
+  // Per passage: whether it is flagged, or null where it cannot be.
+  flags: (boolean | null)[];
+  genders: Record<string, CharacterGender>;
+  // Flags or unflags a passage of the document on screen, without stopping
+  // the read.
+  onToggleFlag: (index: number) => void;
   speakers: ChunkSpeaker[];
 };
 
@@ -332,25 +340,34 @@ export function useReadAloud() {
     );
   }
 
+  // A device voice and its pitch: characters who share a voice are pitched
+  // apart.
   function resolveChunkDeviceVoice(index: number) {
     const narrator = resolveDeviceVoice();
     const speaker = getChunkSpeaker(index);
 
     if (!speaker) {
-      return narrator;
+      return { pitch: 1, voice: narrator };
     }
 
-    const voiceURI = castDeviceVoices(
+    const cast = castDeviceVoices(
       charactersRef.current,
       deviceVoicesRef.current,
       narrator,
       getCastOverrides().device,
-    )[speaker];
-
-    return (
-      deviceVoicesRef.current.find((voice) => voice.voiceURI === voiceURI) ??
-      narrator
     );
+    const pitch =
+      getSharedVoicePitches(charactersRef.current, cast, narrator?.voiceURI)[
+        speaker
+      ] ?? 1;
+
+    return {
+      pitch,
+      voice:
+        deviceVoicesRef.current.find(
+          (voice) => voice.voiceURI === cast[speaker],
+        ) ?? narrator,
+    };
   }
 
   function resolveDeviceVoice() {
@@ -373,7 +390,7 @@ export function useReadAloud() {
     }
 
     const utterance = new SpeechSynthesisUtterance(readableChunks[index]);
-    const voice = resolveChunkDeviceVoice(index);
+    const { pitch, voice } = resolveChunkDeviceVoice(index);
 
     if (voice) {
       utterance.voice = voice;
@@ -381,7 +398,7 @@ export function useReadAloud() {
     }
 
     utterance.rate = rateRef.current;
-    utterance.pitch = 1;
+    utterance.pitch = pitch;
     utterance.onend = () => {
       if (session === sessionRef.current) {
         speakDeviceChunk(index + 1, session);
@@ -547,7 +564,10 @@ export function useReadAloud() {
 
     chunksRef.current = readableChunks;
     speakersRef.current = script?.speakers ?? [];
-    charactersRef.current = getCastCharacters(speakersRef.current);
+    charactersRef.current = getCastCharacters(
+      speakersRef.current,
+      script?.genders,
+    );
     castKeyRef.current = script?.castKey ?? null;
     setSourceTabId(sourceId);
     setTotal(readableChunks.length);
@@ -680,8 +700,8 @@ export function useReadAloud() {
   // The current engine's cast for a script: every speaking character, leads
   // first, with the voice they will read in. A recast takes effect from the
   // next passage, even mid-read.
-  function getCast(castKey: string, speakers: ChunkSpeaker[]) {
-    const characters = getCastCharacters(speakers);
+  function getCast({ castKey, genders, speakers }: ReadAloudScript) {
+    const characters = getCastCharacters(speakers, genders);
     const overrides = casts[castKey] ?? {};
     const voices: Record<string, string> =
       engine === "natural"

@@ -40,7 +40,22 @@ export function useReadAloudShortcuts({
         return;
       }
 
-      if (event.key === "ArrowLeft" && sessionActive) {
+      // F flags the line being read, when the script on screen is the one
+      // reading.
+      const flag =
+        reader.sourceTabId === activeTabId
+          ? script?.flags[reader.currentIndex]
+          : undefined;
+
+      if (
+        (event.key === "f" || event.key === "F") &&
+        sessionActive &&
+        !event.repeat &&
+        flag != null
+      ) {
+        event.preventDefault();
+        script?.onToggleFlag(reader.currentIndex);
+      } else if (event.key === "ArrowLeft" && sessionActive) {
         event.preventDefault();
         reader.seekBy(-1);
       } else if (event.key === "ArrowRight" && sessionActive) {

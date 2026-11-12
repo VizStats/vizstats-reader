@@ -1,3 +1,4 @@
+import { countFlags } from "@/lib/fountain/flags";
 import { getFountainPlainText } from "@/lib/fountain/inline";
 import {
   getEighths,
@@ -27,7 +28,7 @@ export function getScreenplayHeadingIds(screenplay: Screenplay) {
     if (element.type === "section" || element.type === "scene-heading") {
       ids.set(
         element,
-        `${SCREENPLAY_HEADING_ID_PREFIX}${slug(getFountainPlainText(element.text))}`,
+        `${SCREENPLAY_HEADING_ID_PREFIX}${slug(getHeadingText(element.text))}`,
       );
     }
   }
@@ -50,6 +51,17 @@ export function getScreenplayBlocks(
   const headings: HeadingBlock[] = [];
   const spoken: MarkdownBlock[] = [];
   let sectionLevel = 0;
+  // Flagged lines count toward the scene or section they sit under.
+  let flagCount = 0;
+  const closeHeading = () => {
+    const heading = headings.at(-1);
+
+    if (heading && flagCount > 0) {
+      heading.flags = flagCount;
+    }
+
+    flagCount = 0;
+  };
 
   const titleSpeech = getTitlePageSpeech(screenplay);
 
@@ -62,14 +74,18 @@ export function getScreenplayBlocks(
   }
 
   for (const element of screenplay.elements) {
+    const elementFlags = getElementFlags(element);
+
     switch (element.type) {
       case "section":
       case "scene-heading": {
-        const text = getFountainPlainText(element.text);
+        const text = getHeadingText(element.text);
 
         if (!text) {
           break;
         }
+
+        closeHeading();
 
         if (element.type === "section") {
           sectionLevel = element.level;
@@ -132,9 +148,36 @@ export function getScreenplayBlocks(
       case "synopsis":
         break;
     }
+
+    flagCount += elementFlags;
   }
 
+  closeHeading();
+
   return { headings, spoken };
+}
+
+function getElementFlags(element: ScreenplayElement) {
+  switch (element.type) {
+    case "dialogue":
+      return getDialogueFlags(element);
+    case "dual-dialogue":
+      return getDialogueFlags(element.left) + getDialogueFlags(element.right);
+    case "page-break":
+      return 0;
+    default:
+      return countFlags(element.text);
+  }
+}
+
+function getDialogueFlags(block: DialogueBlock) {
+  return block.runs.reduce((total, run) => total + countFlags(run.text), 0);
+}
+
+// A heading's words, without notes or the space they leave behind, so a
+// flag or note never changes the heading's id.
+function getHeadingText(text: string) {
+  return getFountainPlainText(text).replace(/\s+/g, " ").trim();
 }
 
 export function getScreenplayStats(
