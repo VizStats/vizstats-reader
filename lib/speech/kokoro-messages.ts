@@ -50,6 +50,8 @@ export type KokoroDevice = "webgpu" | "wasm";
 
 export type KokoroDtype = "fp32" | "q8";
 
+export type KokoroPerformanceMode = "fast-load" | "webgpu";
+
 export type KokoroTarget = {
   device: KokoroDevice;
   dtype: KokoroDtype;
@@ -61,7 +63,7 @@ export type KokoroAudio = {
 };
 
 export type KokoroWorkerRequest =
-  | { type: "init" }
+  | { type: "init"; mode: KokoroPerformanceMode }
   | { type: "prefetch-voices"; voices: KokoroVoiceId[] }
   | { type: "generate"; id: number; text: string; voice: KokoroVoiceId };
 

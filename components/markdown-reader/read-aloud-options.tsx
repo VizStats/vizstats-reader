@@ -58,6 +58,7 @@ export function ReadAloudOptions({
   sections: SpeechSection[];
 }) {
   const engineControlId = `${controlIdPrefix}-engine`;
+  const naturalModeControlId = `${controlIdPrefix}-natural-mode`;
   const rateControlId = `${controlIdPrefix}-rate`;
   const voiceControlId = `${controlIdPrefix}-voice`;
   const tableReadLabelId = `${controlIdPrefix}-table-read`;
@@ -188,6 +189,37 @@ export function ReadAloudOptions({
               </NativeSelectOption>
             </NativeSelect>
           </div>
+
+          {reader.engine === "natural" ? (
+            <div className="flex flex-col gap-1.5">
+              <label
+                className="text-xs font-medium text-muted-foreground"
+                htmlFor={naturalModeControlId}
+              >
+                Performance
+              </label>
+              <NativeSelect
+                className="w-full"
+                id={naturalModeControlId}
+                onChange={(event) =>
+                  reader.setNaturalMode(
+                    event.currentTarget.value === "webgpu"
+                      ? "webgpu"
+                      : "fast-load",
+                  )
+                }
+                size="sm"
+                value={reader.naturalMode}
+              >
+                <NativeSelectOption value="fast-load">
+                  Fast load · CPU (~90 MB)
+                </NativeSelectOption>
+                <NativeSelectOption value="webgpu">
+                  Fastest paragraphs · WebGPU (~326 MB)
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-1.5">
             <label

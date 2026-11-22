@@ -38,18 +38,49 @@ function writeAscii(view: DataView, offset: number, text: string) {
   }
 }
 
+type PreparedAudio = {
+  audio: HTMLAudioElement;
+  clip: KokoroAudio;
+  url: string;
+};
+
 /**
- * Plays synthesized natural-voice PCM through HTMLAudioElement so reading-speed
- * adjustments (`playbackRate`) always preserve natural vocal pitch without
- * Web Audio pitch-shifting or buffer-boundary clicks.
+ * Double-buffered HTMLAudioElement player for natural-voice PCM clips.
+ *
+ * - Uses `preservesPitch = true` so reading speeds (0.75x–1.5x) never distort
+ *   vocal pitch.
+ * - Pre-encodes and pre-decodes the next passage via `prepareNext()` while the
+ *   current passage is still playing, so `onended` starts the next clip without
+ *   waiting for WAV encoding or audio decoding.
  */
 export class WebAudioPlayer {
   private audio: HTMLAudioElement | null = null;
   private objectUrl: string | null = null;
+  private prepared: PreparedAudio | null = null;
   private playbackRate = 1;
 
   unlock() {
     // HTMLAudioElement playback is initiated from user gestures in start/seek/resume.
+  }
+
+  prepareNext(clip: KokoroAudio, rate: number) {
+    if (clip.pcm.length === 0 || this.prepared?.clip === clip) {
+      return;
+    }
+
+    this.clearPrepared();
+
+    const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
+    const blob = new Blob([wav], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+
+    audio.preload = "auto";
+    audio.preservesPitch = true;
+    audio.playbackRate = rate;
+    audio.load();
+
+    this.prepared = { audio, clip, url };
   }
 
   async play(
@@ -57,17 +88,27 @@ export class WebAudioPlayer {
     rate: number,
     onEnded: () => void,
   ): Promise<void> {
-    this.stop();
+    this.stopCurrent();
 
     if (clip.pcm.length === 0) {
       onEnded();
       return;
     }
 
-    const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
-    const blob = new Blob([wav], { type: "audio/wav" });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    let audio: HTMLAudioElement;
+    let url: string;
+
+    if (this.prepared?.clip === clip) {
+      audio = this.prepared.audio;
+      url = this.prepared.url;
+      this.prepared = null;
+    } else {
+      const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
+      const blob = new Blob([wav], { type: "audio/wav" });
+
+      url = URL.createObjectURL(blob);
+      audio = new Audio(url);
+    }
 
     this.objectUrl = url;
     this.audio = audio;
@@ -80,7 +121,7 @@ export class WebAudioPlayer {
         return;
       }
 
-      this.stop();
+      this.stopCurrent();
       onEnded();
     };
 
@@ -89,7 +130,7 @@ export class WebAudioPlayer {
         return;
       }
 
-      this.stop();
+      this.stopCurrent();
     };
 
     await audio.play();
@@ -115,9 +156,23 @@ export class WebAudioPlayer {
       this.audio.preservesPitch = true;
       this.audio.playbackRate = rate;
     }
+
+    if (this.prepared) {
+      this.prepared.audio.preservesPitch = true;
+      this.prepared.audio.playbackRate = rate;
+    }
   }
 
   stop() {
+    this.stopCurrent();
+    this.clearPrepared();
+  }
+
+  dispose() {
+    this.stop();
+  }
+
+  private stopCurrent() {
     const audio = this.audio;
 
     if (audio) {
@@ -133,7 +188,13 @@ export class WebAudioPlayer {
     }
   }
 
-  dispose() {
-    this.stop();
+  private clearPrepared() {
+    if (!this.prepared) {
+      return;
+    }
+
+    this.prepared.audio.pause();
+    URL.revokeObjectURL(this.prepared.url);
+    this.prepared = null;
   }
 }

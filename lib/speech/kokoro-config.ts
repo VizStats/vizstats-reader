@@ -1,8 +1,12 @@
-import type { KokoroTarget } from "@/lib/speech/kokoro-messages";
+import type {
+  KokoroPerformanceMode,
+  KokoroTarget,
+} from "@/lib/speech/kokoro-messages";
 
 export type KokoroCapabilities = {
   crossOriginIsolated: boolean;
   hasWebGPU: boolean;
+  mode?: KokoroPerformanceMode;
 };
 
 // Minimum passage length before splitting off the leading sentence for fast
@@ -10,22 +14,33 @@ export type KokoroCapabilities = {
 const FAST_START_MIN_LENGTH = 90;
 const FAST_START_MAX_LEAD = 140;
 
+const SILENCE_THRESHOLD = 0.004;
+const LEAD_PAD_SECONDS = 0.02;
+const TRAIL_PAD_SECONDS = 0.04;
+const EDGE_FADE_SECONDS = 0.005;
+
 /**
  * Returns an ordered fallback chain of Kokoro (device, dtype) targets.
  *
  * Kokoro-82M's ISTFTNet vocoder produces cracked audio in `fp16` on WebGPU, so
  * only the two clean configurations are used:
- * - Multi-threaded `q8` on WASM (~92 MB): 3.5× smaller than WebGPU `fp32`,
- *   clean voice fidelity, and no multi-second WebGPU shader compilation delay
- *   on page load. Preferred whenever cross-origin isolation enables WASM
- *   threads.
- * - `fp32` on WebGPU (~326 MB): clean fallback when WASM threading is
- *   unavailable (e.g. browsers without COEP credentialless) or WASM fails.
+ * - Multi-threaded `q8` on WASM (~92 MB): fast initial load, clean voice
+ *   fidelity, and no multi-second WebGPU shader compilation delay.
+ * - `fp32` on WebGPU (~326 MB): slower first load, fastest per-paragraph
+ *   synthesis for long documents when `mode === "webgpu"`.
  */
 export function resolveKokoroTargets({
   crossOriginIsolated,
   hasWebGPU,
+  mode = "fast-load",
 }: KokoroCapabilities): KokoroTarget[] {
+  if (mode === "webgpu" && hasWebGPU) {
+    return [
+      { device: "webgpu", dtype: "fp32" },
+      { device: "wasm", dtype: "q8" },
+    ];
+  }
+
   if (crossOriginIsolated) {
     return hasWebGPU
       ? [
@@ -43,6 +58,65 @@ export function resolveKokoroTargets({
   }
 
   return [{ device: "wasm", dtype: "q8" }];
+}
+
+/**
+ * Trims Kokoro's baked-in leading and trailing silence from a synthesized
+ * waveform, keeping a short natural breath margin and micro-fade so adjacent
+ * passages flow without half-second dead gaps or edge clicks.
+ */
+export function trimSilence(
+  samples: Float32Array,
+  sampleRate: number,
+): Float32Array {
+  if (samples.length === 0 || sampleRate <= 0) {
+    return samples;
+  }
+
+  let first = -1;
+  let last = -1;
+
+  for (let i = 0; i < samples.length; i++) {
+    if (Math.abs(samples[i]!) >= SILENCE_THRESHOLD) {
+      first = i;
+      break;
+    }
+  }
+
+  if (first === -1) {
+    return samples;
+  }
+
+  for (let i = samples.length - 1; i >= first; i--) {
+    if (Math.abs(samples[i]!) >= SILENCE_THRESHOLD) {
+      last = i;
+      break;
+    }
+  }
+
+  const leadPad = Math.round(sampleRate * LEAD_PAD_SECONDS);
+  const trailPad = Math.round(sampleRate * TRAIL_PAD_SECONDS);
+  const start = Math.max(0, first - leadPad);
+  const end = Math.min(samples.length, last + 1 + trailPad);
+
+  if (start === 0 && end === samples.length) {
+    return samples;
+  }
+
+  const trimmed = samples.slice(start, end);
+  const fadeSamples = Math.min(
+    Math.round(sampleRate * EDGE_FADE_SECONDS),
+    Math.floor(trimmed.length / 4),
+  );
+
+  for (let i = 0; i < fadeSamples; i++) {
+    const gain = i / fadeSamples;
+
+    trimmed[i] = trimmed[i]! * gain;
+    trimmed[trimmed.length - 1 - i] = trimmed[trimmed.length - 1 - i]! * gain;
+  }
+
+  return trimmed;
 }
 
 /**

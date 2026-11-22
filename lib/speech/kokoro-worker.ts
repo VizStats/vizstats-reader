@@ -1,7 +1,11 @@
 import { KokoroTTS } from "kokoro-js";
 
-import { resolveKokoroTargets } from "@/lib/speech/kokoro-config";
+import {
+  resolveKokoroTargets,
+  trimSilence,
+} from "@/lib/speech/kokoro-config";
 import type {
+  KokoroPerformanceMode,
   KokoroTarget,
   KokoroVoiceId,
   KokoroWorkerRequest,
@@ -30,9 +34,12 @@ const scope = self as unknown as {
 };
 
 let ttsPromise: Promise<KokoroTTS> | null = null;
+let loadedMode: KokoroPerformanceMode = "fast-load";
 const prefetchedVoices = new Set<KokoroVoiceId>();
 
-async function detectTargets(): Promise<KokoroTarget[]> {
+async function detectTargets(
+  mode: KokoroPerformanceMode,
+): Promise<KokoroTarget[]> {
   const gpu = (navigator as unknown as WebGPUNavigator).gpu;
   let hasWebGPU = false;
 
@@ -47,6 +54,7 @@ async function detectTargets(): Promise<KokoroTarget[]> {
   return resolveKokoroTargets({
     crossOriginIsolated: Boolean(scope.crossOriginIsolated),
     hasWebGPU,
+    mode,
   });
 }
 
@@ -96,9 +104,10 @@ async function prefetchVoices(voices: KokoroVoiceId[]) {
   );
 }
 
-function loadModel() {
+function loadModel(mode: KokoroPerformanceMode = loadedMode) {
+  loadedMode = mode;
   ttsPromise ??= (async () => {
-    const targets = await detectTargets();
+    const targets = await detectTargets(mode);
     let lastError: unknown;
 
     for (const target of targets) {
@@ -163,7 +172,7 @@ async function handleRequest(request: KokoroWorkerRequest) {
 
   if (request.type === "init") {
     try {
-      await loadModel();
+      await loadModel(request.mode);
     } catch (error) {
       ttsPromise = null;
       scope.postMessage({ type: "init-error", error: toErrorMessage(error) });
@@ -175,11 +184,12 @@ async function handleRequest(request: KokoroWorkerRequest) {
   try {
     const tts = await loadModel();
     const audio = await tts.generate(request.text, { voice: request.voice });
-    const raw = audio.audio;
+    const trimmed = trimSilence(audio.audio, audio.sampling_rate);
     const pcm =
-      raw.byteOffset === 0 && raw.byteLength === raw.buffer.byteLength
-        ? raw
-        : new Float32Array(raw);
+      trimmed.byteOffset === 0 &&
+      trimmed.byteLength === trimmed.buffer.byteLength
+        ? trimmed
+        : new Float32Array(trimmed);
 
     scope.postMessage(
       { type: "result", id: request.id, pcm, sampleRate: audio.sampling_rate },

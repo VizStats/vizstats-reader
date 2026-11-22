@@ -4,6 +4,7 @@ import {
 } from "@/lib/speech/kokoro-cache";
 import type {
   KokoroAudio,
+  KokoroPerformanceMode,
   KokoroTarget,
   KokoroVoiceId,
   KokoroWorkerResponse,
@@ -42,6 +43,7 @@ class KokoroEngine {
   state: KokoroEngineState = "idle";
   progress = 0;
   runtime: KokoroTarget | null = null;
+  mode: KokoroPerformanceMode = "fast-load";
 
   constructor() {
     this.queue = new KokoroPriorityQueue((job) => this.runWorkerJob(job));
@@ -63,14 +65,35 @@ class KokoroEngine {
     };
   }
 
+  setMode(nextMode: KokoroPerformanceMode, voices: KokoroVoiceId[] = []) {
+    if (nextMode === this.mode) {
+      return;
+    }
+
+    this.mode = nextMode;
+
+    if (this.worker || this.readyPromise) {
+      this.resetWorker();
+      this.prewarm(voices);
+    }
+  }
+
   /**
    * Starts loading the ONNX model and prefetches voice embeddings in the
    * background so clicking Play starts immediately instead of waiting on cold
    * worker + model initialization.
    */
-  prewarm(voices: KokoroVoiceId[] = []) {
+  prewarm(voices: KokoroVoiceId[] = [], mode?: KokoroPerformanceMode) {
     if (!KokoroEngine.isSupported()) {
       return;
+    }
+
+    if (mode && mode !== this.mode) {
+      this.mode = mode;
+
+      if (this.worker || this.readyPromise) {
+        this.resetWorker();
+      }
     }
 
     if (voices.length > 0) {
@@ -109,7 +132,7 @@ class KokoroEngine {
       this.rejectReady = reject;
     });
 
-    this.getWorker().postMessage({ type: "init" });
+    this.getWorker().postMessage({ type: "init", mode: this.mode });
 
     return this.readyPromise;
   }
@@ -241,6 +264,27 @@ class KokoroEngine {
     }
   }
 
+  private resetWorker() {
+    const error = new Error("Switching natural voice runtime.");
+
+    this.state = "idle";
+    this.runtime = null;
+    this.rejectReady?.(error);
+    this.resolveReady = null;
+    this.rejectReady = null;
+    this.readyPromise = null;
+
+    for (const request of this.pending.values()) {
+      request.reject(error);
+    }
+
+    this.pending.clear();
+    this.queue.failAll(error);
+    this.worker?.terminate();
+    this.worker = null;
+    this.notifyProgress(0);
+  }
+
   private failEverything(error: Error) {
     this.state = "error";
     this.runtime = null;
@@ -277,7 +321,7 @@ class KokoroEngine {
 }
 
 function getCacheKey(text: string, voice: KokoroVoiceId) {
-  return `v2|${voice}|${text}`;
+  return `v3|${voice}|${text}`;
 }
 
 let engine: KokoroEngine | null = null;

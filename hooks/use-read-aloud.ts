@@ -21,6 +21,7 @@ import {
   DEFAULT_KOKORO_VOICE,
   isKokoroVoiceId,
   type KokoroAudio,
+  type KokoroPerformanceMode,
   type KokoroTarget,
   type KokoroVoiceId,
 } from "@/lib/speech/kokoro-messages";
@@ -57,20 +58,15 @@ export type ReadAloudScript = {
 };
 
 // How many passages the natural voice keeps generated ahead of the play head.
-// A small rolling buffer starts playback fastest and stays well within the
-// engine's audio cache — the YouTube "buffer a little ahead, then wait" model.
-const BUFFER_AHEAD = 3;
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
+// A deeper rolling runway keeps short headings from outrunning synthesis on
+// CPU/WASM while staying well within the engine's audio cache.
+const BUFFER_AHEAD = 8;
 
 type StoredPrefs = {
   engine?: ReadAloudEngine;
   deviceVoiceURI?: string | null;
   kokoroVoice?: string;
+  naturalMode?: KokoroPerformanceMode;
   rate?: number;
   tableRead?: boolean;
 };
@@ -176,6 +172,7 @@ export function useReadAloud() {
   const sessionRef = useRef(0);
   const webAudioRef = useRef<WebAudioPlayer | null>(null);
   const playbackIndexRef = useRef(0);
+  const bufferWakeRef = useRef<(() => void) | null>(null);
   const [speechStatus, setSpeechStatus] =
     useState<Exclude<ReadAloudStatus, "unsupported">>("idle");
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -211,6 +208,10 @@ export function useReadAloud() {
       ? storedVoice
       : DEFAULT_KOKORO_VOICE;
   });
+  const [naturalMode, setNaturalModeState] = useState<KokoroPerformanceMode>(
+    () =>
+      readStoredPrefs().naturalMode === "webgpu" ? "webgpu" : "fast-load",
+  );
   const [tableRead, setTableReadState] = useState(
     () => readStoredPrefs().tableRead === true,
   );
@@ -231,6 +232,7 @@ export function useReadAloud() {
   const deviceVoicesRef = useRef(deviceVoices);
   const deviceVoiceURIRef = useRef(deviceVoiceURI);
   const kokoroVoiceRef = useRef(kokoroVoice);
+  const naturalModeRef = useRef(naturalMode);
   const tableReadRef = useRef(tableRead);
   const castsRef = useRef(casts);
 
@@ -241,6 +243,7 @@ export function useReadAloud() {
   deviceVoicesRef.current = deviceVoices;
   deviceVoiceURIRef.current = deviceVoiceURI;
   kokoroVoiceRef.current = kokoroVoice;
+  naturalModeRef.current = naturalMode;
 
   const deviceSupported =
     typeof window !== "undefined" &&
@@ -287,8 +290,23 @@ export function useReadAloud() {
       return;
     }
 
-    getKokoroEngine().prewarm([kokoroVoiceRef.current]);
+    getKokoroEngine().prewarm([kokoroVoiceRef.current], naturalModeRef.current);
   }, [engine, naturalSupported]);
+
+  function wakeBuffer() {
+    const wake = bufferWakeRef.current;
+
+    if (wake) {
+      bufferWakeRef.current = null;
+      wake();
+    }
+  }
+
+  function waitForBufferWake() {
+    return new Promise<void>((resolve) => {
+      bufferWakeRef.current = resolve;
+    });
+  }
 
   useEffect(() => {
     // Shared teardown for both React unmount (tab close/switch) and a hard
@@ -296,6 +314,7 @@ export function useReadAloud() {
     // and speechSynthesis — a browser-global service — can keep speaking.
     function teardown() {
       sessionRef.current += 1;
+      wakeBuffer();
 
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
@@ -463,6 +482,22 @@ export function useReadAloud() {
       });
   }
 
+  function prepareFollowingChunk(index: number) {
+    const nextIndex = index + 1;
+    const nextText = chunksRef.current[nextIndex];
+
+    if (!nextText) {
+      return;
+    }
+
+    const nextVoice = resolveNaturalVoice(nextIndex);
+    const nextClip = getKokoroEngine().getCached(nextText, nextVoice);
+
+    if (nextClip) {
+      getWebAudioPlayer().prepareNext(nextClip, rateRef.current);
+    }
+  }
+
   async function playNaturalChunk(index: number, session: number) {
     if (session !== sessionRef.current) {
       return;
@@ -481,10 +516,12 @@ export function useReadAloud() {
     const cached = kokoro.getCached(text, voice);
 
     playbackIndexRef.current = index;
+    wakeBuffer();
     setCurrentIndex(index);
 
     if (cached) {
       setBufferedIndex((previous) => Math.max(previous, index));
+      prepareFollowingChunk(index);
       playAudioClip(cached, session, () => {
         void playNaturalChunk(index + 1, session);
       });
@@ -527,6 +564,7 @@ export function useReadAloud() {
 
     if (!restSegment) {
       setBufferedIndex((previous) => Math.max(previous, index));
+      prepareFollowingChunk(index);
       playAudioClip(firstAudio, session, () => {
         void playNaturalChunk(index + 1, session);
       });
@@ -534,10 +572,20 @@ export function useReadAloud() {
     }
 
     // Synthesize the rest of this passage at high priority while the opening
-    // sentence plays, so the second half starts with zero wait.
+    // sentence plays, and pre-decode it as soon as it finishes so the handoff
+    // inside the passage is seamless.
     const restPromise = kokoro.generate(restSegment, voice, "high");
 
-    void restPromise.catch(() => undefined);
+    void restPromise
+      .then((restAudio) => {
+        if (
+          session === sessionRef.current &&
+          playbackIndexRef.current === index
+        ) {
+          getWebAudioPlayer().prepareNext(restAudio, rateRef.current);
+        }
+      })
+      .catch(() => undefined);
 
     playAudioClip(firstAudio, session, () => {
       void (async () => {
@@ -568,6 +616,7 @@ export function useReadAloud() {
         }
 
         setBufferedIndex((previous) => Math.max(previous, index));
+        prepareFollowingChunk(index);
         playAudioClip(restAudio, session, () => {
           void playNaturalChunk(index + 1, session);
         });
@@ -585,13 +634,12 @@ export function useReadAloud() {
 
     for (let index = startIndex + 1; index < readableChunks.length; index++) {
       // Throttle: don't run more than BUFFER_AHEAD ahead of what's playing.
-      // Polling keeps this deadlock-free and unparks within ~120ms of a
-      // session change (stop / restart / voice or engine change / unmount).
+      // Wakes immediately when the play head advances or the session stops.
       while (
         session === sessionRef.current &&
         index > playbackIndexRef.current + BUFFER_AHEAD
       ) {
-        await delay(120);
+        await waitForBufferWake();
       }
 
       if (session !== sessionRef.current) {
@@ -599,10 +647,11 @@ export function useReadAloud() {
       }
 
       const voice = resolveNaturalVoice(index);
+      let clip = kokoro.getCached(readableChunks[index], voice);
 
-      if (!kokoro.getCached(readableChunks[index], voice)) {
+      if (!clip) {
         try {
-          await kokoro.generate(readableChunks[index], voice, "low");
+          clip = await kokoro.generate(readableChunks[index], voice, "low");
         } catch (error) {
           if (error instanceof CancelledError) {
             return;
@@ -614,6 +663,10 @@ export function useReadAloud() {
 
       if (session !== sessionRef.current) {
         return;
+      }
+
+      if (index === playbackIndexRef.current + 1) {
+        getWebAudioPlayer().prepareNext(clip, rateRef.current);
       }
 
       setBufferedIndex((previous) => Math.max(previous, index));
@@ -630,6 +683,7 @@ export function useReadAloud() {
     );
 
     sessionRef.current += 1;
+    wakeBuffer();
 
     const session = sessionRef.current;
 
@@ -760,6 +814,7 @@ export function useReadAloud() {
 
   function stop() {
     sessionRef.current += 1;
+    wakeBuffer();
 
     if (deviceSupported) {
       window.speechSynthesis.cancel();
@@ -796,7 +851,21 @@ export function useReadAloud() {
     writeStoredPrefs({ engine: nextEngine });
 
     if (nextEngine === "natural" && isKokoroSupported()) {
-      getKokoroEngine().prewarm([kokoroVoiceRef.current]);
+      getKokoroEngine().prewarm([kokoroVoiceRef.current], naturalModeRef.current);
+    }
+  }
+
+  function setNaturalMode(nextMode: KokoroPerformanceMode) {
+    if (nextMode === naturalModeRef.current) {
+      return;
+    }
+
+    stop();
+    setNaturalModeState(nextMode);
+    writeStoredPrefs({ naturalMode: nextMode });
+
+    if (isKokoroSupported()) {
+      getKokoroEngine().setMode(nextMode, [kokoroVoiceRef.current]);
     }
   }
 
@@ -890,8 +959,9 @@ export function useReadAloud() {
     getCast,
     kokoroRuntime,
     kokoroVoice,
-    narratorDeviceVoice,
     modelProgress,
+    narratorDeviceVoice,
+    naturalMode,
     naturalSupported,
     pause,
     rate,
@@ -903,6 +973,7 @@ export function useReadAloud() {
     setDeviceVoiceURI,
     setEngine,
     setKokoroVoice,
+    setNaturalMode,
     setRate,
     setTableRead,
     sourceTabId,
