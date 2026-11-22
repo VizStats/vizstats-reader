@@ -839,7 +839,8 @@
     }
   }
 
-  /* The passage currently being read aloud. */
+  /* Fallback block highlight when Custom Highlight API is unavailable or
+     spoken text is synthetic (e.g. screenplay scene headings). */
   .markdown-preview [data-speaking],
   .screenplay-preview [data-speaking] {
     background-color: color-mix(in oklab, var(--core-teal) 10%, transparent);
@@ -856,4 +857,22 @@
       transition: none;
     }
   }
+}
+
+/* The sentence currently being read aloud (CSS Custom Highlight API).
+   Kept top-level so :root::highlight() applies cleanly across themes.
+   Pairs high-contrast background + text color with a subtle underline so
+   the highlight never relies on color alone (WCAG 1.4.3 / 1.4.11). */
+:root::highlight(read-aloud-sentence) {
+  background-color: #d6f1f4;
+  color: #042529;
+  text-decoration: underline;
+  text-decoration-color: #03444a;
+}
+
+:root.dark::highlight(read-aloud-sentence) {
+  background-color: #0e4a52;
+  color: #f4fbfc;
+  text-decoration: underline;
+  text-decoration-color: #58d1e2;
 }

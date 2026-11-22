@@ -15,10 +15,12 @@ import { usePreviewTracking } from "@/hooks/use-preview-tracking";
 import { remarkHeadingIds } from "@/lib/markdown/remark-heading-ids";
 
 export function MarkdownPreview({
+  activeSentence = null,
   activeSourceLine = null,
   content,
   onActiveHeadingChange,
 }: {
+  activeSentence?: string | null;
   activeSourceLine?: number | null;
   content: string;
   onActiveHeadingChange: (headingId: string) => void;
@@ -26,6 +28,7 @@ export function MarkdownPreview({
   const articleRef = useRef<HTMLElement>(null);
 
   usePreviewTracking(articleRef, {
+    activeSentence,
     activeSourceLine,
     content,
     onActiveHeadingChange,

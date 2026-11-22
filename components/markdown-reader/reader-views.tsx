@@ -38,6 +38,7 @@ import {
 import type { ReadAloudController } from "@/hooks/use-read-aloud";
 import {
   getSpeakingLine,
+  getSpeakingSentence,
   useReaderTabModel,
   type ReaderTabModel,
 } from "@/hooks/use-reader-tab-model";
@@ -138,6 +139,7 @@ export function SingleReaderView({
         >
           {file?.kind === "screenplay" && isEditing ? (
             <ScreenplayEditor
+              activeSentence={getSpeakingSentence(reader, activeTab.id)}
               activeSourceLine={getSpeakingLine(
                 reader,
                 activeTab.id,
@@ -161,6 +163,7 @@ export function SingleReaderView({
               >
                 {file ? (
                   <DocumentPreview
+                    activeSentence={getSpeakingSentence(reader, activeTab.id)}
                     activeSourceLine={getSpeakingLine(
                       reader,
                       activeTab.id,
@@ -416,6 +419,7 @@ function SplitReaderPane({
       >
         {file?.kind === "screenplay" && isEditing ? (
           <ScreenplayEditor
+            activeSentence={getSpeakingSentence(reader, tab.id)}
             activeSourceLine={getSpeakingLine(
               reader,
               tab.id,
@@ -439,6 +443,7 @@ function SplitReaderPane({
             >
               {file ? (
                 <DocumentPreview
+                  activeSentence={getSpeakingSentence(reader, tab.id)}
                   activeSourceLine={getSpeakingLine(
                     reader,
                     tab.id,
@@ -496,12 +501,14 @@ function SplitReaderPane({
 }
 
 function DocumentPreview({
+  activeSentence,
   activeSourceLine,
   file,
   isEditing,
   onActiveHeadingChange,
   onChange,
 }: {
+  activeSentence: null | string;
   activeSourceLine: null | number;
   file: LoadedFile;
   isEditing: boolean;
@@ -511,6 +518,7 @@ function DocumentPreview({
   if (file.kind === "screenplay") {
     return (
       <ScreenplayPreview
+        activeSentence={activeSentence}
         activeSourceLine={activeSourceLine}
         content={file.content}
         onActiveHeadingChange={onActiveHeadingChange}
@@ -520,6 +528,7 @@ function DocumentPreview({
 
   return (
     <EditableMarkdownPreview
+      activeSentence={activeSentence}
       activeSourceLine={activeSourceLine}
       content={file.content}
       isEditing={file.kind === "markdown" && isEditing}
@@ -532,12 +541,14 @@ function DocumentPreview({
 // Screenplay editing: the Fountain text, with the formatted screenplay
 // updating beside it when there is room.
 function ScreenplayEditor({
+  activeSentence,
   activeSourceLine,
   content,
   onActiveHeadingChange,
   onChange,
   showLivePreview,
 }: {
+  activeSentence: null | string;
   activeSourceLine: null | number;
   content: string;
   onActiveHeadingChange: (headingId: string) => void;
@@ -562,6 +573,7 @@ function ScreenplayEditor({
         <ScrollArea className="hidden h-full min-w-0 flex-1 md:block">
           <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8">
             <ScreenplayPreview
+              activeSentence={activeSentence}
               activeSourceLine={activeSourceLine}
               content={content}
               onActiveHeadingChange={onActiveHeadingChange}

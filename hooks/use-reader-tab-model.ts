@@ -169,3 +169,22 @@ export function getSpeakingLine(
 
   return chunkLines[reader.currentIndex] ?? null;
 }
+
+export function getSpeakingSentence(
+  reader: ReadAloudController,
+  tabId: string,
+): string | null {
+  if (reader.sourceTabId !== tabId) {
+    return null;
+  }
+
+  if (
+    reader.status !== "playing" &&
+    reader.status !== "paused" &&
+    reader.status !== "loading"
+  ) {
+    return null;
+  }
+
+  return reader.activeSentence;
+}

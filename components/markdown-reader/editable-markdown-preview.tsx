@@ -9,12 +9,14 @@ import { RichMarkdownEditor } from "@/components/markdown-reader/rich-markdown-e
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function EditableMarkdownPreview({
+  activeSentence = null,
   activeSourceLine = null,
   content,
   isEditing,
   onActiveHeadingChange,
   onChange,
 }: {
+  activeSentence?: string | null;
   activeSourceLine?: number | null;
   content: string;
   isEditing: boolean;
@@ -37,6 +39,7 @@ export function EditableMarkdownPreview({
   if (!isEditing) {
     return (
       <MarkdownPreview
+        activeSentence={activeSentence}
         activeSourceLine={activeSourceLine}
         content={content}
         onActiveHeadingChange={onActiveHeadingChange}

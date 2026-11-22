@@ -55,10 +55,12 @@ function useScreenplayLayout(content: string) {
 }
 
 export function ScreenplayPreview({
+  activeSentence = null,
   activeSourceLine = null,
   content,
   onActiveHeadingChange,
 }: {
+  activeSentence?: string | null;
   activeSourceLine?: number | null;
   content: string;
   onActiveHeadingChange: (headingId: string) => void;
@@ -67,6 +69,7 @@ export function ScreenplayPreview({
   const { ids, pages, screenplay } = useScreenplayLayout(content);
 
   usePreviewTracking(articleRef, {
+    activeSentence,
     activeSourceLine,
     content,
     onActiveHeadingChange,
