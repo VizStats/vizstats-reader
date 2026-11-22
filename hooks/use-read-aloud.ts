@@ -15,12 +15,17 @@ import {
   type CastOverrides,
   type CharacterGender,
 } from "@/lib/speech/cast";
+import { splitForFastStart } from "@/lib/speech/kokoro-config";
 import { getKokoroEngine, isKokoroSupported } from "@/lib/speech/kokoro-engine";
 import {
   DEFAULT_KOKORO_VOICE,
   isKokoroVoiceId,
+  type KokoroAudio,
+  type KokoroTarget,
   type KokoroVoiceId,
 } from "@/lib/speech/kokoro-messages";
+import { CancelledError } from "@/lib/speech/kokoro-queue";
+import { WebAudioPlayer } from "@/lib/speech/web-audio-player";
 import {
   getSelectedChunkIndex,
   type ChunkSpeaker,
@@ -154,6 +159,14 @@ function getKokoroProgressServerSnapshot(): number | null {
   return null;
 }
 
+function getKokoroRuntimeSnapshot(): KokoroTarget | null {
+  return isKokoroSupported() ? getKokoroEngine().runtime : null;
+}
+
+function getKokoroRuntimeServerSnapshot(): KokoroTarget | null {
+  return null;
+}
+
 export function useReadAloud() {
   const chunksRef = useRef<string[]>([]);
   // The playing script's speakers and cast list; empty outside screenplays.
@@ -161,8 +174,7 @@ export function useReadAloud() {
   const charactersRef = useRef<CastCharacter[]>([]);
   const castKeyRef = useRef<null | string>(null);
   const sessionRef = useRef(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
+  const webAudioRef = useRef<WebAudioPlayer | null>(null);
   const playbackIndexRef = useRef(0);
   const [speechStatus, setSpeechStatus] =
     useState<Exclude<ReadAloudStatus, "unsupported">>("idle");
@@ -207,6 +219,11 @@ export function useReadAloud() {
     subscribeToKokoroProgress,
     getKokoroProgressSnapshot,
     getKokoroProgressServerSnapshot,
+  );
+  const kokoroRuntime = useSyncExternalStore(
+    subscribeToKokoroProgress,
+    getKokoroRuntimeSnapshot,
+    getKokoroRuntimeServerSnapshot,
   );
 
   const rateRef = useRef(rate);
@@ -262,6 +279,33 @@ export function useReadAloud() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Prewarm the natural voice worker, ONNX model, and active voice embedding
+  // during browser idle time whenever the user has selected the natural engine,
+  // so clicking Play starts without cold model initialization delay.
+  useEffect(() => {
+    if (engine !== "natural" || !naturalSupported) {
+      return;
+    }
+
+    const warm = () => {
+      getKokoroEngine().prewarm([kokoroVoiceRef.current]);
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 1500 });
+
+      return () => {
+        window.cancelIdleCallback(id);
+      };
+    }
+
+    const timer = window.setTimeout(warm, 300);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [engine, naturalSupported]);
+
   useEffect(() => {
     // Shared teardown for both React unmount (tab close/switch) and a hard
     // browser tab/window close, where unmount effects are not guaranteed to run
@@ -273,6 +317,10 @@ export function useReadAloud() {
         window.speechSynthesis.cancel();
       }
 
+      if (isKokoroSupported()) {
+        getKokoroEngine().cancelLowPriority();
+      }
+
       cleanupAudio();
     }
 
@@ -281,23 +329,19 @@ export function useReadAloud() {
     return () => {
       window.removeEventListener("pagehide", teardown);
       teardown();
+      webAudioRef.current?.dispose();
+      webAudioRef.current = null;
     };
   }, []);
 
+  function getWebAudioPlayer() {
+    webAudioRef.current ??= new WebAudioPlayer();
+
+    return webAudioRef.current;
+  }
+
   function cleanupAudio() {
-    const audio = audioRef.current;
-
-    if (audio) {
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      audioRef.current = null;
-    }
-
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
+    webAudioRef.current?.stop();
   }
 
   function finishPlayback(session: number) {
@@ -416,6 +460,25 @@ export function useReadAloud() {
     window.speechSynthesis.speak(utterance);
   }
 
+  function playAudioClip(
+    audio: KokoroAudio,
+    session: number,
+    onEnded: () => void,
+  ) {
+    setSpeechStatus("playing");
+    void getWebAudioPlayer()
+      .play(audio, rateRef.current, () => {
+        if (session === sessionRef.current) {
+          onEnded();
+        }
+      })
+      .catch(() => {
+        if (session === sessionRef.current) {
+          setSpeechStatus("idle");
+        }
+      });
+  }
+
   async function playNaturalChunk(index: number, session: number) {
     if (session !== sessionRef.current) {
       return;
@@ -429,22 +492,43 @@ export function useReadAloud() {
     }
 
     const kokoro = getKokoroEngine();
+    const text = readableChunks[index];
     const voice = resolveNaturalVoice(index);
-    const cached = kokoro.getCached(readableChunks[index], voice);
+    const cached = kokoro.getCached(text, voice);
 
     playbackIndexRef.current = index;
     setCurrentIndex(index);
 
-    if (!cached) {
-      // The buffer has not caught up to the play head yet — show "buffering".
+    if (cached) {
+      setBufferedIndex((previous) => Math.max(previous, index));
+      playAudioClip(cached, session, () => {
+        void playNaturalChunk(index + 1, session);
+      });
+      return;
+    }
+
+    // Fast-start: when the play head hits an uncached multi-sentence passage,
+    // synthesize its short opening sentence first and immediately queue the
+    // remainder behind it so audio starts speaking 2–3× sooner.
+    const segments = splitForFastStart(text);
+    const [firstSegment, restSegment] = segments;
+
+    if (!firstSegment) {
+      void playNaturalChunk(index + 1, session);
+      return;
+    }
+
+    const cachedFirst = kokoro.getCached(firstSegment, voice);
+
+    if (!cachedFirst) {
       setSpeechStatus("loading");
     }
 
-    let blob: Blob;
+    let firstAudio: KokoroAudio;
 
     try {
-      // Deduped against the buffer loop, so this reuses its in-flight job.
-      blob = cached ?? (await kokoro.generate(readableChunks[index], voice));
+      firstAudio =
+        cachedFirst ?? (await kokoro.generate(firstSegment, voice, "high"));
     } catch {
       if (session === sessionRef.current) {
         setSpeechStatus("idle");
@@ -457,40 +541,65 @@ export function useReadAloud() {
       return;
     }
 
-    cleanupAudio();
-
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-
-    objectUrlRef.current = url;
-    audioRef.current = audio;
-    audio.playbackRate = rateRef.current;
-    audio.onended = () => {
-      if (session === sessionRef.current) {
+    if (!restSegment) {
+      setBufferedIndex((previous) => Math.max(previous, index));
+      playAudioClip(firstAudio, session, () => {
         void playNaturalChunk(index + 1, session);
-      }
-    };
-    audio.onerror = () => {
-      if (session === sessionRef.current) {
-        setSpeechStatus("idle");
-      }
-    };
+      });
+      return;
+    }
 
-    setSpeechStatus("playing");
-    void audio.play().catch(() => {
-      if (session === sessionRef.current) {
-        setSpeechStatus("idle");
-      }
+    // Synthesize the rest of this passage at high priority while the opening
+    // sentence plays, so the second half starts with zero wait.
+    const restPromise = kokoro.generate(restSegment, voice, "high");
+
+    void restPromise.catch(() => undefined);
+
+    playAudioClip(firstAudio, session, () => {
+      void (async () => {
+        if (session !== sessionRef.current) {
+          return;
+        }
+
+        const cachedRest = kokoro.getCached(restSegment, voice);
+
+        if (!cachedRest) {
+          setSpeechStatus("loading");
+        }
+
+        let restAudio: KokoroAudio;
+
+        try {
+          restAudio = cachedRest ?? (await restPromise);
+        } catch {
+          if (session === sessionRef.current) {
+            setSpeechStatus("idle");
+          }
+
+          return;
+        }
+
+        if (session !== sessionRef.current) {
+          return;
+        }
+
+        setBufferedIndex((previous) => Math.max(previous, index));
+        playAudioClip(restAudio, session, () => {
+          void playNaturalChunk(index + 1, session);
+        });
+      })();
     });
   }
 
-  // Generates audio ahead of the play head, staying at most BUFFER_AHEAD
-  // passages in front, and advances `bufferedIndex` as each one is ready.
+  // Generates audio ahead of the play head at low priority, staying at most
+  // BUFFER_AHEAD passages in front, and advances `bufferedIndex` as each one is
+  // ready. Starts at `startIndex + 1` so the play head owns `startIndex` at
+  // high priority without racing.
   async function bufferLoop(session: number, startIndex: number) {
     const kokoro = getKokoroEngine();
     const readableChunks = chunksRef.current;
 
-    for (let index = startIndex; index < readableChunks.length; index++) {
+    for (let index = startIndex + 1; index < readableChunks.length; index++) {
       // Throttle: don't run more than BUFFER_AHEAD ahead of what's playing.
       // Polling keeps this deadlock-free and unparks within ~120ms of a
       // session change (stop / restart / voice or engine change / unmount).
@@ -509,8 +618,12 @@ export function useReadAloud() {
 
       if (!kokoro.getCached(readableChunks[index], voice)) {
         try {
-          await kokoro.generate(readableChunks[index], voice);
-        } catch {
+          await kokoro.generate(readableChunks[index], voice, "low");
+        } catch (error) {
+          if (error instanceof CancelledError) {
+            return;
+          }
+
           return;
         }
       }
@@ -545,8 +658,12 @@ export function useReadAloud() {
     playbackIndexRef.current = safeStartIndex;
 
     if (engineRef.current === "natural") {
-      void bufferLoop(session, safeStartIndex);
+      // Unlock Web Audio synchronously inside the user gesture and drop any
+      // stale look-ahead jobs from the previous position.
+      getWebAudioPlayer().unlock();
+      getKokoroEngine().cancelLowPriority();
       void playNaturalChunk(safeStartIndex, session);
+      void bufferLoop(session, safeStartIndex);
     } else {
       speakDeviceChunk(safeStartIndex, session);
     }
@@ -571,6 +688,23 @@ export function useReadAloud() {
     castKeyRef.current = script?.castKey ?? null;
     setSourceTabId(sourceId);
     setTotal(readableChunks.length);
+
+    if (engineRef.current === "natural") {
+      const voicesToWarm: KokoroVoiceId[] = [kokoroVoiceRef.current];
+
+      if (tableReadRef.current && charactersRef.current.length > 0) {
+        const cast = castNaturalVoices(
+          charactersRef.current,
+          kokoroVoiceRef.current,
+          getCastOverrides().natural,
+        );
+
+        voicesToWarm.push(...Object.values(cast));
+      }
+
+      getKokoroEngine().prefetchVoices(voicesToWarm);
+    }
+
     beginPlaybackAt(startIndex);
   }
 
@@ -616,7 +750,7 @@ export function useReadAloud() {
     }
 
     if (engineRef.current === "natural") {
-      audioRef.current?.pause();
+      webAudioRef.current?.pause();
     } else if (deviceSupported) {
       window.speechSynthesis.pause();
     }
@@ -630,7 +764,9 @@ export function useReadAloud() {
     }
 
     if (engineRef.current === "natural") {
-      void audioRef.current?.play().catch(() => setSpeechStatus("idle"));
+      void getWebAudioPlayer()
+        .resume()
+        .catch(() => setSpeechStatus("idle"));
     } else if (deviceSupported) {
       window.speechSynthesis.resume();
     }
@@ -645,6 +781,10 @@ export function useReadAloud() {
       window.speechSynthesis.cancel();
     }
 
+    if (isKokoroSupported()) {
+      getKokoroEngine().cancelLowPriority();
+    }
+
     cleanupAudio();
     setCurrentIndex(0);
     setBufferedIndex(-1);
@@ -657,10 +797,7 @@ export function useReadAloud() {
     const safeRate = Math.min(1.5, Math.max(0.75, nextRate));
 
     setRateState(safeRate);
-
-    if (audioRef.current) {
-      audioRef.current.playbackRate = safeRate;
-    }
+    webAudioRef.current?.setRate(safeRate);
 
     writeStoredPrefs({ rate: safeRate });
   }
@@ -673,6 +810,10 @@ export function useReadAloud() {
     stop();
     setEngineState(nextEngine);
     writeStoredPrefs({ engine: nextEngine });
+
+    if (nextEngine === "natural" && isKokoroSupported()) {
+      getKokoroEngine().prewarm([kokoroVoiceRef.current]);
+    }
   }
 
   function setDeviceVoiceURI(nextVoiceURI: string | null) {
@@ -683,6 +824,13 @@ export function useReadAloud() {
   function setKokoroVoice(nextVoice: KokoroVoiceId) {
     setKokoroVoiceState(nextVoice);
     writeStoredPrefs({ kokoroVoice: nextVoice });
+
+    if (isKokoroSupported()) {
+      const kokoro = getKokoroEngine();
+
+      kokoro.cancelLowPriority();
+      kokoro.prefetchVoices([nextVoice]);
+    }
   }
 
   // Turning the table read on or off changes the passages themselves (names
@@ -734,6 +882,14 @@ export function useReadAloud() {
 
   function setCharacterVoice(castKey: string, name: string, voice: string) {
     updateCast(castKey, (overrides) => ({ ...overrides, [name]: voice }));
+
+    if (
+      engineRef.current === "natural" &&
+      isKokoroSupported() &&
+      isKokoroVoiceId(voice)
+    ) {
+      getKokoroEngine().prefetchVoices([voice]);
+    }
   }
 
   function resetCast(castKey: string) {
@@ -748,6 +904,7 @@ export function useReadAloud() {
     deviceVoices,
     engine,
     getCast,
+    kokoroRuntime,
     kokoroVoice,
     narratorDeviceVoice,
     modelProgress,

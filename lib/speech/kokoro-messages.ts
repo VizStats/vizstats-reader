@@ -46,13 +46,28 @@ export function getKokoroVoiceLabel(voice: KokoroVoice) {
   return `${voice.name} · ${voice.accent}`;
 }
 
+export type KokoroDevice = "webgpu" | "wasm";
+
+export type KokoroDtype = "fp16" | "fp32" | "q8";
+
+export type KokoroTarget = {
+  device: KokoroDevice;
+  dtype: KokoroDtype;
+};
+
+export type KokoroAudio = {
+  pcm: Float32Array;
+  sampleRate: number;
+};
+
 export type KokoroWorkerRequest =
   | { type: "init" }
+  | { type: "prefetch-voices"; voices: KokoroVoiceId[] }
   | { type: "generate"; id: number; text: string; voice: KokoroVoiceId };
 
 export type KokoroWorkerResponse =
   | { type: "progress"; progress: number }
-  | { type: "ready"; device: "webgpu" | "wasm" }
+  | { type: "ready"; device: KokoroDevice; dtype: KokoroDtype }
   | { type: "init-error"; error: string }
-  | { type: "result"; id: number; wav: ArrayBuffer }
+  | { type: "result"; id: number; pcm: Float32Array; sampleRate: number }
   | { type: "generate-error"; id: number; error: string };

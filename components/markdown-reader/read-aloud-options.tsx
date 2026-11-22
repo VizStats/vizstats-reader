@@ -307,7 +307,13 @@ export function ReadAloudOptions({
 
           <p className="text-xs text-muted-foreground">
             {reader.engine === "natural"
-              ? "The natural voice runs entirely in your browser. The first use downloads a ~90 MB model, which is then cached — no account or API key needed."
+              ? reader.kokoroRuntime
+                ? `Natural voice ready on ${
+                    reader.kokoroRuntime.device === "webgpu"
+                      ? `WebGPU (${reader.kokoroRuntime.dtype})`
+                      : `CPU/WASM (${reader.kokoroRuntime.dtype})`
+                  }. Everything runs locally in your browser.`
+                : "The natural voice runs entirely in your browser and preloads in the background (~90–160 MB on first use, then cached locally) — no account or API key needed."
               : "Device voices play instantly. Voices marked ★ usually sound the most natural. On macOS you can add higher-quality voices in System Settings → Accessibility → Spoken Content."}
           </p>
         </PopoverContent>

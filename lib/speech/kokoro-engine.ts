@@ -1,13 +1,29 @@
+import {
+  loadPersistedAudio,
+  savePersistedAudio,
+} from "@/lib/speech/kokoro-cache";
 import type {
+  KokoroAudio,
+  KokoroTarget,
   KokoroVoiceId,
   KokoroWorkerResponse,
 } from "@/lib/speech/kokoro-messages";
+import {
+  KokoroPriorityQueue,
+  type QueuePriority,
+} from "@/lib/speech/kokoro-queue";
 
-const AUDIO_CACHE_LIMIT = 48;
+const AUDIO_CACHE_LIMIT = 96;
 
-type PendingRequest = {
-  resolve: (blob: Blob) => void;
+type PendingWorkerJob = {
+  resolve: (audio: KokoroAudio) => void;
   reject: (error: Error) => void;
+};
+
+type GenerateJob = {
+  key: string;
+  text: string;
+  voice: KokoroVoiceId;
 };
 
 export type KokoroEngineState = "idle" | "loading" | "ready" | "error";
@@ -17,14 +33,19 @@ class KokoroEngine {
   private readyPromise: Promise<void> | null = null;
   private resolveReady: (() => void) | null = null;
   private rejectReady: ((error: Error) => void) | null = null;
-  private pending = new Map<number, PendingRequest>();
+  private pending = new Map<number, PendingWorkerJob>();
   private nextRequestId = 1;
-  private cache = new Map<string, Blob>();
-  private inFlight = new Map<string, Promise<Blob>>();
+  private cache = new Map<string, KokoroAudio>();
   private progressListeners = new Set<(progress: number) => void>();
+  private queue: KokoroPriorityQueue<GenerateJob, KokoroAudio>;
 
   state: KokoroEngineState = "idle";
   progress = 0;
+  runtime: KokoroTarget | null = null;
+
+  constructor() {
+    this.queue = new KokoroPriorityQueue((job) => this.runWorkerJob(job));
+  }
 
   static isSupported() {
     return (
@@ -40,6 +61,35 @@ class KokoroEngine {
     return () => {
       this.progressListeners.delete(listener);
     };
+  }
+
+  /**
+   * Starts loading the ONNX model and prefetches voice embeddings in the
+   * background so clicking Play starts immediately instead of waiting on cold
+   * worker + model initialization.
+   */
+  prewarm(voices: KokoroVoiceId[] = []) {
+    if (!KokoroEngine.isSupported()) {
+      return;
+    }
+
+    if (voices.length > 0) {
+      this.prefetchVoices(voices);
+    }
+
+    if (this.state === "idle" || this.state === "error") {
+      void this.ensureReady().catch(() => undefined);
+    }
+  }
+
+  prefetchVoices(voices: KokoroVoiceId[]) {
+    if (!KokoroEngine.isSupported() || voices.length === 0) {
+      return;
+    }
+
+    const unique = Array.from(new Set(voices));
+
+    this.getWorker().postMessage({ type: "prefetch-voices", voices: unique });
   }
 
   ensureReady(): Promise<void> {
@@ -68,7 +118,11 @@ class KokoroEngine {
     return this.cache.get(getCacheKey(text, voice)) ?? null;
   }
 
-  generate(text: string, voice: KokoroVoiceId): Promise<Blob> {
+  generate(
+    text: string,
+    voice: KokoroVoiceId,
+    priority: QueuePriority = "high",
+  ): Promise<KokoroAudio> {
     const key = getCacheKey(text, voice);
     const cached = this.cache.get(key);
 
@@ -76,49 +130,50 @@ class KokoroEngine {
       return Promise.resolve(cached);
     }
 
-    // De-duplicate concurrent requests for the same chunk so the play head and
-    // the look-ahead buffer never generate the same audio twice on the worker.
-    const existing = this.inFlight.get(key);
-
-    if (existing) {
-      return existing;
-    }
-
-    const promise = this.requestGeneration(key, text, voice);
-
-    this.inFlight.set(key, promise);
-    // Identity-checked cleanup: only forget this promise if it is still the
-    // current in-flight one. The trailing catch keeps the bookkeeping chain from
-    // surfacing an unhandled rejection — the caller still receives `promise`.
-    void promise
-      .finally(() => {
-        if (this.inFlight.get(key) === promise) {
-          this.inFlight.delete(key);
-        }
-      })
-      .catch(() => undefined);
-
-    return promise;
+    return this.queue.enqueue(key, { key, text, voice }, priority);
   }
 
-  private async requestGeneration(
-    key: string,
-    text: string,
-    voice: KokoroVoiceId,
-  ): Promise<Blob> {
+  /**
+   * Drops queued look-ahead jobs so a seek, stop, or voice change never waits
+   * behind stale background synthesis work.
+   */
+  cancelLowPriority() {
+    this.queue.cancelLowPriority();
+  }
+
+  private async runWorkerJob(job: GenerateJob): Promise<KokoroAudio> {
+    const cached = this.cache.get(job.key);
+
+    if (cached) {
+      return cached;
+    }
+
+    const persisted = await loadPersistedAudio(job.key);
+
+    if (persisted) {
+      this.storeInCache(job.key, persisted);
+      return persisted;
+    }
+
     await this.ensureReady();
 
-    return new Promise<Blob>((resolve, reject) => {
+    return new Promise<KokoroAudio>((resolve, reject) => {
       const id = this.nextRequestId++;
 
       this.pending.set(id, {
-        resolve: (blob) => {
-          this.storeInCache(key, blob);
-          resolve(blob);
+        resolve: (audio) => {
+          this.storeInCache(job.key, audio);
+          void savePersistedAudio(job.key, audio);
+          resolve(audio);
         },
         reject,
       });
-      this.getWorker().postMessage({ type: "generate", id, text, voice });
+      this.getWorker().postMessage({
+        type: "generate",
+        id,
+        text: job.text,
+        voice: job.voice,
+      });
     });
   }
 
@@ -147,6 +202,7 @@ class KokoroEngine {
       }
       case "ready": {
         this.state = "ready";
+        this.runtime = { device: response.device, dtype: response.dtype };
         this.notifyProgress(1);
         this.resolveReady?.();
         this.resolveReady = null;
@@ -161,7 +217,10 @@ class KokoroEngine {
         const request = this.pending.get(response.id);
 
         this.pending.delete(response.id);
-        request?.resolve(new Blob([response.wav], { type: "audio/wav" }));
+        request?.resolve({
+          pcm: response.pcm,
+          sampleRate: response.sampleRate,
+        });
         return;
       }
       case "generate-error": {
@@ -184,6 +243,7 @@ class KokoroEngine {
 
   private failEverything(error: Error) {
     this.state = "error";
+    this.runtime = null;
     this.rejectReady?.(error);
     this.resolveReady = null;
     this.rejectReady = null;
@@ -194,12 +254,12 @@ class KokoroEngine {
     }
 
     this.pending.clear();
-    this.inFlight.clear();
+    this.queue.failAll(error);
     this.worker?.terminate();
     this.worker = null;
   }
 
-  private storeInCache(key: string, blob: Blob) {
+  private storeInCache(key: string, audio: KokoroAudio) {
     if (this.cache.has(key)) {
       return;
     }
@@ -212,7 +272,7 @@ class KokoroEngine {
       }
     }
 
-    this.cache.set(key, blob);
+    this.cache.set(key, audio);
   }
 }
 
