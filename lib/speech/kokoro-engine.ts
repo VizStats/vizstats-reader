@@ -277,7 +277,7 @@ class KokoroEngine {
 }
 
 function getCacheKey(text: string, voice: KokoroVoiceId) {
-  return `${voice}|${text}`;
+  return `v2|${voice}|${text}`;
 }
 
 let engine: KokoroEngine | null = null;

@@ -1,207 +1,139 @@
+import { encodePcm16 } from "@/lib/speech/kokoro-cache";
 import type { KokoroAudio } from "@/lib/speech/kokoro-messages";
 
 /**
- * Plays raw Float32 PCM from the Kokoro worker directly through Web Audio API.
- *
- * Avoids WAV header encoding, Blob URL creation, and HTMLAudioElement decoding
- * overhead, reducing playback start latency and inter-chunk gaps while still
- * supporting live speed adjustments, pause, resume, and immediate stop.
+ * Encodes mono Float32 PCM into a standard 16-bit PCM WAV buffer.
+ */
+export function encodeWavFromPcm(
+  samples: Float32Array,
+  sampleRate: number,
+): ArrayBuffer {
+  const pcm16 = encodePcm16(samples);
+  const dataBytes = pcm16.byteLength;
+  const buffer = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true); // PCM header size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate (sampleRate * 1ch * 2B)
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+
+  new Uint8Array(buffer, 44).set(new Uint8Array(pcm16));
+
+  return buffer;
+}
+
+function writeAscii(view: DataView, offset: number, text: string) {
+  for (let i = 0; i < text.length; i++) {
+    view.setUint8(offset + i, text.charCodeAt(i));
+  }
+}
+
+/**
+ * Plays synthesized natural-voice PCM through HTMLAudioElement so reading-speed
+ * adjustments (`playbackRate`) always preserve natural vocal pitch without
+ * Web Audio pitch-shifting or buffer-boundary clicks.
  */
 export class WebAudioPlayer {
-  private context: AudioContext | null = null;
-  private source: AudioBufferSourceNode | null = null;
-  private currentBuffer: AudioBuffer | null = null;
-  private onEnded: (() => void) | null = null;
+  private audio: HTMLAudioElement | null = null;
+  private objectUrl: string | null = null;
   private playbackRate = 1;
-  private startedAt = 0;
-  private offsetSeconds = 0;
-  private playing = false;
-  private paused = false;
 
-  /**
-   * Creates or resumes the AudioContext synchronously inside a user gesture so
-   * playback that starts after an async generation step is never blocked by
-   * browser autoplay policies.
-   */
   unlock() {
-    const context = this.getContext();
-
-    if (context && context.state === "suspended") {
-      void context.resume().catch(() => undefined);
-    }
+    // HTMLAudioElement playback is initiated from user gestures in start/seek/resume.
   }
 
   async play(
-    audio: KokoroAudio,
+    clip: KokoroAudio,
     rate: number,
     onEnded: () => void,
   ): Promise<void> {
-    const context = this.getContext();
-
-    if (!context) {
-      throw new Error("Web Audio is not available in this browser.");
-    }
-
     this.stop();
 
-    if (audio.pcm.length === 0) {
+    if (clip.pcm.length === 0) {
       onEnded();
       return;
     }
 
-    if (context.state === "suspended") {
-      await context.resume();
-    }
+    const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
+    const blob = new Blob([wav], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
 
-    const buffer = context.createBuffer(1, audio.pcm.length, audio.sampleRate);
-
-    buffer.getChannelData(0).set(audio.pcm);
-
-    this.currentBuffer = buffer;
+    this.objectUrl = url;
+    this.audio = audio;
     this.playbackRate = rate;
-    this.offsetSeconds = 0;
-    this.onEnded = onEnded;
-    this.paused = false;
+    audio.preservesPitch = true;
+    audio.playbackRate = rate;
 
-    this.startFromOffset(context, buffer, 0);
+    audio.onended = () => {
+      if (this.audio !== audio) {
+        return;
+      }
+
+      this.stop();
+      onEnded();
+    };
+
+    audio.onerror = () => {
+      if (this.audio !== audio) {
+        return;
+      }
+
+      this.stop();
+    };
+
+    await audio.play();
   }
 
   pause() {
-    if (!this.playing || !this.context || !this.currentBuffer) {
-      return;
-    }
-
-    const elapsed =
-      (this.context.currentTime - this.startedAt) * this.playbackRate;
-
-    this.offsetSeconds = Math.min(
-      this.currentBuffer.duration,
-      this.offsetSeconds + Math.max(0, elapsed),
-    );
-    this.detachSource();
-    this.playing = false;
-    this.paused = true;
+    this.audio?.pause();
   }
 
   async resume(): Promise<void> {
-    if (!this.paused || !this.context || !this.currentBuffer) {
+    if (!this.audio) {
       return;
     }
 
-    if (this.context.state === "suspended") {
-      await this.context.resume();
-    }
-
-    this.paused = false;
-    this.startFromOffset(this.context, this.currentBuffer, this.offsetSeconds);
+    this.audio.playbackRate = this.playbackRate;
+    await this.audio.play();
   }
 
   setRate(rate: number) {
-    if (this.playing && this.context && this.currentBuffer) {
-      const elapsed =
-        (this.context.currentTime - this.startedAt) * this.playbackRate;
-
-      this.offsetSeconds = Math.min(
-        this.currentBuffer.duration,
-        this.offsetSeconds + Math.max(0, elapsed),
-      );
-      this.startedAt = this.context.currentTime;
-    }
-
     this.playbackRate = rate;
 
-    if (this.source) {
-      this.source.playbackRate.value = rate;
+    if (this.audio) {
+      this.audio.preservesPitch = true;
+      this.audio.playbackRate = rate;
     }
   }
 
   stop() {
-    this.detachSource();
-    this.currentBuffer = null;
-    this.onEnded = null;
-    this.offsetSeconds = 0;
-    this.playing = false;
-    this.paused = false;
+    const audio = this.audio;
+
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      this.audio = null;
+    }
+
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
   }
 
   dispose() {
     this.stop();
-
-    if (this.context) {
-      void this.context.close().catch(() => undefined);
-      this.context = null;
-    }
-  }
-
-  private getContext(): AudioContext | null {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    if (!this.context) {
-      const Ctor =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-
-      if (!Ctor) {
-        return null;
-      }
-
-      this.context = new Ctor();
-    }
-
-    return this.context;
-  }
-
-  private startFromOffset(
-    context: AudioContext,
-    buffer: AudioBuffer,
-    offset: number,
-  ) {
-    const source = context.createBufferSource();
-
-    source.buffer = buffer;
-    source.playbackRate.value = this.playbackRate;
-    source.connect(context.destination);
-
-    source.onended = () => {
-      if (this.source !== source) {
-        return;
-      }
-
-      const callback = this.onEnded;
-
-      this.source = null;
-      this.currentBuffer = null;
-      this.onEnded = null;
-      this.playing = false;
-      this.paused = false;
-      callback?.();
-    };
-
-    this.source = source;
-    this.startedAt = context.currentTime;
-    this.playing = true;
-    source.start(0, Math.min(offset, Math.max(0, buffer.duration - 0.001)));
-  }
-
-  private detachSource() {
-    const source = this.source;
-
-    if (!source) {
-      return;
-    }
-
-    this.source = null;
-    source.onended = null;
-
-    try {
-      source.stop();
-    } catch {
-      // Already stopped.
-    }
-
-    source.disconnect();
   }
 }

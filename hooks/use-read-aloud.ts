@@ -280,30 +280,14 @@ export function useReadAloud() {
   }, []);
 
   // Prewarm the natural voice worker, ONNX model, and active voice embedding
-  // during browser idle time whenever the user has selected the natural engine,
-  // so clicking Play starts without cold model initialization delay.
+  // immediately on mount whenever the user has selected the natural engine, so
+  // clicking Play starts without cold model initialization delay.
   useEffect(() => {
     if (engine !== "natural" || !naturalSupported) {
       return;
     }
 
-    const warm = () => {
-      getKokoroEngine().prewarm([kokoroVoiceRef.current]);
-    };
-
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(warm, { timeout: 1500 });
-
-      return () => {
-        window.cancelIdleCallback(id);
-      };
-    }
-
-    const timer = window.setTimeout(warm, 300);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    getKokoroEngine().prewarm([kokoroVoiceRef.current]);
   }, [engine, naturalSupported]);
 
   useEffect(() => {

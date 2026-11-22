@@ -48,7 +48,7 @@ export function getKokoroVoiceLabel(voice: KokoroVoice) {
 
 export type KokoroDevice = "webgpu" | "wasm";
 
-export type KokoroDtype = "fp16" | "fp32" | "q8";
+export type KokoroDtype = "fp32" | "q8";
 
 export type KokoroTarget = {
   device: KokoroDevice;

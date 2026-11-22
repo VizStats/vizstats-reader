@@ -1,7 +1,8 @@
 import type { KokoroAudio } from "@/lib/speech/kokoro-messages";
 
 const DATABASE_NAME = "vizstats-reader-speech";
-const DATABASE_VERSION = 1;
+// Bumped to v2 to clear any v1 clips generated under WebGPU fp16.
+const DATABASE_VERSION = 2;
 const STORE_NAME = "chunks";
 const MAX_PERSISTED_CHUNKS = 256;
 
@@ -56,13 +57,15 @@ function openSpeechDatabase(): Promise<IDBDatabase | null> {
     try {
       const request = idb.open(DATABASE_NAME, DATABASE_VERSION);
 
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = (event) => {
         const db = request.result;
 
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: "key" });
 
           store.createIndex("updatedAt", "updatedAt", { unique: false });
+        } else if (event.oldVersion < 2 && request.transaction) {
+          request.transaction.objectStore(STORE_NAME).clear();
         }
       };
 

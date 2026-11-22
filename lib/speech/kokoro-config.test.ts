@@ -6,25 +6,10 @@ import {
 } from "@/lib/speech/kokoro-config";
 
 describe("resolveKokoroTargets", () => {
-  it("prefers fp16 on WebGPU when shader-f16 is supported, with q8 WASM fallback", () => {
+  it("prefers multi-threaded q8 WASM (~92 MB, clean audio, no shader compile) when crossOriginIsolated", () => {
     expect(
       resolveKokoroTargets({
         crossOriginIsolated: true,
-        hasShaderF16: true,
-        hasWebGPU: true,
-      }),
-    ).toEqual([
-      { device: "webgpu", dtype: "fp16" },
-      { device: "wasm", dtype: "q8" },
-      { device: "webgpu", dtype: "fp32" },
-    ]);
-  });
-
-  it("prefers multi-threaded q8 WASM over 326 MB fp32 when WebGPU lacks shader-f16", () => {
-    expect(
-      resolveKokoroTargets({
-        crossOriginIsolated: true,
-        hasShaderF16: false,
         hasWebGPU: true,
       }),
     ).toEqual([
@@ -33,27 +18,25 @@ describe("resolveKokoroTargets", () => {
     ]);
   });
 
-  it("uses WebGPU fp32 then q8 WASM when neither shader-f16 nor crossOriginIsolated is available", () => {
-    expect(
-      resolveKokoroTargets({
-        crossOriginIsolated: false,
-        hasShaderF16: false,
-        hasWebGPU: true,
-      }),
-    ).toEqual([
-      { device: "webgpu", dtype: "fp32" },
-      { device: "wasm", dtype: "q8" },
-    ]);
-  });
-
-  it("falls back to q8 WASM when WebGPU is absent", () => {
+  it("uses only q8 WASM when WebGPU is absent", () => {
     expect(
       resolveKokoroTargets({
         crossOriginIsolated: true,
-        hasShaderF16: false,
         hasWebGPU: false,
       }),
     ).toEqual([{ device: "wasm", dtype: "q8" }]);
+  });
+
+  it("uses WebGPU fp32 then q8 WASM when crossOriginIsolated is unavailable", () => {
+    expect(
+      resolveKokoroTargets({
+        crossOriginIsolated: false,
+        hasWebGPU: true,
+      }),
+    ).toEqual([
+      { device: "webgpu", dtype: "fp32" },
+      { device: "wasm", dtype: "q8" },
+    ]);
   });
 });
 

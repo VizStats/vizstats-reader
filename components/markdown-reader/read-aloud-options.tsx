@@ -313,7 +313,7 @@ export function ReadAloudOptions({
                       ? `WebGPU (${reader.kokoroRuntime.dtype})`
                       : `CPU/WASM (${reader.kokoroRuntime.dtype})`
                   }. Everything runs locally in your browser.`
-                : "The natural voice runs entirely in your browser and preloads in the background (~90–160 MB on first use, then cached locally) — no account or API key needed."
+                : "The natural voice runs entirely in your browser and preloads in the background (~90 MB on first use, then cached locally) — no account or API key needed."
               : "Device voices play instantly. Voices marked ★ usually sound the most natural. On macOS you can add higher-quality voices in System Settings → Accessibility → Spoken Content."}
           </p>
         </PopoverContent>

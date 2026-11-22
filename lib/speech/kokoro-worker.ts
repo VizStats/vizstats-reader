@@ -35,16 +35,10 @@ const prefetchedVoices = new Set<KokoroVoiceId>();
 async function detectTargets(): Promise<KokoroTarget[]> {
   const gpu = (navigator as unknown as WebGPUNavigator).gpu;
   let hasWebGPU = false;
-  let hasShaderF16 = false;
 
   if (gpu) {
     try {
-      const adapter = await gpu.requestAdapter();
-
-      if (adapter) {
-        hasWebGPU = true;
-        hasShaderF16 = Boolean(adapter.features?.has("shader-f16"));
-      }
+      hasWebGPU = Boolean(await gpu.requestAdapter());
     } catch {
       hasWebGPU = false;
     }
@@ -52,7 +46,6 @@ async function detectTargets(): Promise<KokoroTarget[]> {
 
   return resolveKokoroTargets({
     crossOriginIsolated: Boolean(scope.crossOriginIsolated),
-    hasShaderF16,
     hasWebGPU,
   });
 }
