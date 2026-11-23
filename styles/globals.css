@@ -860,17 +860,19 @@
 }
 
 /* The sentence currently being read aloud (CSS Custom Highlight API).
-   Kept top-level so :root::highlight() applies cleanly across themes.
-   Pairs high-contrast background + text color with a subtle underline so
-   the highlight never relies on color alone (WCAG 1.4.3 / 1.4.11). */
-:root::highlight(read-aloud-sentence) {
+   Written for every element: Firefox paints a highlight only from a rule
+   matching the element that holds the text, so a :root rule draws nothing
+   there. Pairs high-contrast background + text color with a subtle
+   underline so the highlight never relies on color alone (WCAG 1.4.3 /
+   1.4.11). */
+::highlight(read-aloud-sentence) {
   background-color: #d6f1f4;
   color: #042529;
   text-decoration: underline;
   text-decoration-color: #03444a;
 }
 
-:root.dark::highlight(read-aloud-sentence) {
+.dark ::highlight(read-aloud-sentence) {
   background-color: #0e4a52;
   color: #f4fbfc;
   text-decoration: underline;
