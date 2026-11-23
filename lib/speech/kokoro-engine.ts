@@ -7,6 +7,7 @@ import type {
   KokoroPerformanceMode,
   KokoroRuntime,
   KokoroVoiceId,
+  KokoroWorkerRequest,
   KokoroWorkerResponse,
 } from "@/lib/speech/kokoro-messages";
 import {
@@ -39,6 +40,17 @@ class KokoroEngine {
   private cache = new Map<string, KokoroAudio>();
   private progressListeners = new Set<(progress: number) => void>();
   private queue: KokoroPriorityQueue<GenerateJob, KokoroAudio>;
+  // What the current worker has been sent but not yet answered. A worker
+  // whose script the browser refuses never answers, and its replacement is
+  // sent these again.
+  private unanswered: KokoroWorkerRequest[] = [];
+  private workerAnswered = false;
+  private workerScriptUrl: null | string = null;
+  private refetchedWorkerScript = false;
+  private restarting = false;
+  // Moves on whenever the worker is torn down, so a restart that finishes
+  // after a reset or failure does nothing.
+  private workerGeneration = 0;
 
   state: KokoroEngineState = "idle";
   progress = 0;
@@ -112,7 +124,7 @@ class KokoroEngine {
 
     const unique = Array.from(new Set(voices));
 
-    this.getWorker().postMessage({ type: "prefetch-voices", voices: unique });
+    this.post({ type: "prefetch-voices", voices: unique });
   }
 
   ensureReady(): Promise<void> {
@@ -132,7 +144,7 @@ class KokoroEngine {
       this.rejectReady = reject;
     });
 
-    this.getWorker().postMessage({ type: "init", mode: this.mode });
+    this.post({ type: "init", mode: this.mode });
 
     return this.readyPromise;
   }
@@ -191,7 +203,7 @@ class KokoroEngine {
         },
         reject,
       });
-      this.getWorker().postMessage({
+      this.post({
         type: "generate",
         id,
         text: job.text,
@@ -200,21 +212,84 @@ class KokoroEngine {
     });
   }
 
+  private post(message: KokoroWorkerRequest) {
+    if (this.restarting) {
+      // Sent to the new worker once its script is fetched again.
+      this.unanswered.push(message);
+      return;
+    }
+
+    const worker = this.getWorker();
+
+    if (!this.workerAnswered) {
+      this.unanswered.push(message);
+    }
+
+    worker.postMessage(message);
+  }
+
   private getWorker() {
     if (!this.worker) {
-      this.worker = new Worker(
-        new URL("./kokoro-worker.ts", import.meta.url),
-        { type: "module" },
-      );
-      this.worker.onmessage = (event: MessageEvent<KokoroWorkerResponse>) => {
+      const { scriptUrl, worker } = createVoiceWorker();
+
+      this.worker = worker;
+      this.workerScriptUrl = scriptUrl;
+      this.workerAnswered = false;
+      worker.onmessage = (event: MessageEvent<KokoroWorkerResponse>) => {
+        this.workerAnswered = true;
+        this.unanswered = [];
         this.handleResponse(event.data);
       };
-      this.worker.onerror = () => {
+      worker.onerror = () => {
+        if (
+          !this.workerAnswered &&
+          !this.refetchedWorkerScript &&
+          this.workerScriptUrl
+        ) {
+          void this.restartWithFreshScript(this.workerScriptUrl);
+          return;
+        }
+
         this.failEverything(new Error("The voice engine crashed."));
       };
     }
 
     return this.worker;
+  }
+
+  // A browser that cached the worker's script from a build served without
+  // cross-origin isolation headers refuses that copy now: the file keeps its
+  // name across deploys and may be cached for a year. Fetching it again
+  // replaces the cached copy; a new worker then gets what the refused one
+  // never received. Tried once per page load.
+  private async restartWithFreshScript(scriptUrl: string) {
+    const generation = this.workerGeneration;
+    const freshUrl = new URL(scriptUrl, location.href);
+
+    freshUrl.hash = "";
+    this.refetchedWorkerScript = true;
+    this.restarting = true;
+    this.worker?.terminate();
+    this.worker = null;
+
+    try {
+      await fetch(freshUrl.href, { cache: "reload" });
+    } catch {
+      // The new worker is refused too, and reports the failure.
+    }
+
+    if (generation !== this.workerGeneration) {
+      return;
+    }
+
+    const messages = this.unanswered;
+
+    this.restarting = false;
+    this.unanswered = [];
+
+    for (const message of messages) {
+      this.post(message);
+    }
   }
 
   private handleResponse(response: KokoroWorkerResponse) {
@@ -284,9 +359,17 @@ class KokoroEngine {
 
     this.pending.clear();
     this.queue.failAll(error);
+    this.dropWorker();
+    this.notifyProgress(0);
+  }
+
+  private dropWorker() {
+    this.workerGeneration += 1;
+    this.restarting = false;
+    this.unanswered = [];
+    this.workerAnswered = false;
     this.worker?.terminate();
     this.worker = null;
-    this.notifyProgress(0);
   }
 
   private failEverything(error: Error) {
@@ -303,8 +386,7 @@ class KokoroEngine {
 
     this.pending.clear();
     this.queue.failAll(error);
-    this.worker?.terminate();
-    this.worker = null;
+    this.dropWorker();
   }
 
   private storeInCache(key: string, audio: KokoroAudio) {
@@ -321,6 +403,31 @@ class KokoroEngine {
     }
 
     this.cache.set(key, audio);
+  }
+}
+
+// Turbopack compiles `new Worker(new URL(...))` into a loader that calls the
+// global Worker with its own bootstrap script. Note the URL it passes: when
+// the browser refuses that script, the page has no other way to learn it.
+function createVoiceWorker() {
+  const NativeWorker = globalThis.Worker;
+  const seen: { url: null | string } = { url: null };
+
+  globalThis.Worker = class extends NativeWorker {
+    constructor(url: string | URL, options?: WorkerOptions) {
+      super(url, options);
+      seen.url = String(url);
+    }
+  };
+
+  try {
+    const worker = new Worker(new URL("./kokoro-worker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    return { scriptUrl: seen.url, worker };
+  } finally {
+    globalThis.Worker = NativeWorker;
   }
 }
 
