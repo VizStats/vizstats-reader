@@ -82,3 +82,19 @@ describe("findSentenceOffsets", () => {
     expect(second).toEqual({ end: 27, start: 23 });
   });
 });
+
+describe("splitIntoSentences on report prose", () => {
+  it("keeps decimals, abbreviations, initials and closing quotes inside their sentence", () => {
+    expect(
+      splitIntoSentences(
+        'Lending reached $3.5 billion, up 12.4% on the year. Dr. Okafor called it "the project of the decade." Repayments start in 2027. Questions go to the U.S. office. J. Smith wrote the U.S. Treasury note.',
+      ),
+    ).toEqual([
+      "Lending reached $3.5 billion, up 12.4% on the year.",
+      'Dr. Okafor called it "the project of the decade."',
+      "Repayments start in 2027.",
+      "Questions go to the U.S. office.",
+      "J. Smith wrote the U.S. Treasury note.",
+    ]);
+  });
+});

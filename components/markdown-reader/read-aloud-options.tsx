@@ -37,8 +37,24 @@ import {
   getKokoroVoiceLabel,
   isKokoroVoiceId,
   KOKORO_VOICES,
+  type KokoroRuntime,
 } from "@/lib/speech/kokoro-messages";
 import { cn } from "@/lib/utils";
+
+// What the natural voice is running on, said once, in the reader's terms.
+function getNaturalVoiceNote(runtime: KokoroRuntime | null) {
+  if (!runtime) {
+    return "The natural voice runs in your browser. Its model downloads once, about 330 MB (92 MB with Data saver), then stays on this device. No account or key needed.";
+  }
+
+  if (runtime.device === "webgpu") {
+    return "The natural voice is running on your graphics card, in your browser.";
+  }
+
+  return runtime.upgrading
+    ? "The natural voice is running on the processor while the faster graphics-card model downloads. It switches over when the download finishes."
+    : "The natural voice is running on the processor. Long documents may pause while it catches up.";
+}
 
 export function ReadAloudOptions({
   activeSectionIndex,
@@ -196,26 +212,26 @@ export function ReadAloudOptions({
                 className="text-xs font-medium text-muted-foreground"
                 htmlFor={naturalModeControlId}
               >
-                Performance
+                Model
               </label>
               <NativeSelect
                 className="w-full"
                 id={naturalModeControlId}
                 onChange={(event) =>
                   reader.setNaturalMode(
-                    event.currentTarget.value === "webgpu"
-                      ? "webgpu"
-                      : "fast-load",
+                    event.currentTarget.value === "data-saver"
+                      ? "data-saver"
+                      : "auto",
                   )
                 }
                 size="sm"
                 value={reader.naturalMode}
               >
-                <NativeSelectOption value="fast-load">
-                  Fast load · CPU (~90 MB)
+                <NativeSelectOption value="auto">
+                  Automatic · fastest available
                 </NativeSelectOption>
-                <NativeSelectOption value="webgpu">
-                  Fastest paragraphs · WebGPU (~326 MB)
+                <NativeSelectOption value="data-saver">
+                  Data saver · 92 MB, slower
                 </NativeSelectOption>
               </NativeSelect>
             </div>
@@ -339,13 +355,7 @@ export function ReadAloudOptions({
 
           <p className="text-xs text-muted-foreground">
             {reader.engine === "natural"
-              ? reader.kokoroRuntime
-                ? `Natural voice ready on ${
-                    reader.kokoroRuntime.device === "webgpu"
-                      ? `WebGPU (${reader.kokoroRuntime.dtype})`
-                      : `CPU/WASM (${reader.kokoroRuntime.dtype})`
-                  }. Everything runs locally in your browser.`
-                : "The natural voice runs entirely in your browser and preloads in the background (~90 MB on first use, then cached locally) — no account or API key needed."
+              ? getNaturalVoiceNote(reader.kokoroRuntime)
               : "Device voices play instantly. Voices marked ★ usually sound the most natural. On macOS you can add higher-quality voices in System Settings → Accessibility → Spoken Content."}
           </p>
         </PopoverContent>

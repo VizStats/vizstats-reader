@@ -2,14 +2,17 @@ import { encodePcm16 } from "@/lib/speech/kokoro-cache";
 import type { KokoroAudio } from "@/lib/speech/kokoro-messages";
 
 /**
- * Encodes mono Float32 PCM into a standard 16-bit PCM WAV buffer.
+ * Encodes mono Float32 PCM into a standard 16-bit PCM WAV buffer, followed by
+ * `trailingSilence` seconds of silence (the pause before the next passage).
  */
 export function encodeWavFromPcm(
   samples: Float32Array,
   sampleRate: number,
+  trailingSilence = 0,
 ): ArrayBuffer {
   const pcm16 = encodePcm16(samples);
-  const dataBytes = pcm16.byteLength;
+  const silenceBytes = Math.max(0, Math.round(trailingSilence * sampleRate)) * 2;
+  const dataBytes = pcm16.byteLength + silenceBytes;
   const buffer = new ArrayBuffer(44 + dataBytes);
   const view = new DataView(buffer);
 
@@ -41,8 +44,16 @@ function writeAscii(view: DataView, offset: number, text: string) {
 type PreparedAudio = {
   audio: HTMLAudioElement;
   clip: KokoroAudio;
+  pauseAfter: number;
   url: string;
 };
+
+function createClipAudio(clip: KokoroAudio, pauseAfter: number) {
+  const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate, pauseAfter);
+  const url = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
+
+  return { audio: new Audio(url), url };
+}
 
 /**
  * Double-buffered HTMLAudioElement player for natural-voice PCM clips.
@@ -52,6 +63,8 @@ type PreparedAudio = {
  * - Pre-encodes and pre-decodes the next passage via `prepareNext()` while the
  *   current passage is still playing, so `onended` starts the next clip without
  *   waiting for WAV encoding or audio decoding.
+ * - Plays each clip's pause before the next passage as trailing silence, so
+ *   pausing, resuming and the reading speed apply to it like to speech.
  */
 export class WebAudioPlayer {
   private audio: HTMLAudioElement | null = null;
@@ -63,30 +76,36 @@ export class WebAudioPlayer {
     // HTMLAudioElement playback is initiated from user gestures in start/seek/resume.
   }
 
-  prepareNext(clip: KokoroAudio, rate: number) {
-    if (clip.pcm.length === 0 || this.prepared?.clip === clip) {
+  // Seconds into the playing clip, or null when nothing is playing.
+  get currentTime() {
+    return this.audio ? this.audio.currentTime : null;
+  }
+
+  prepareNext(clip: KokoroAudio, rate: number, pauseAfter = 0) {
+    if (
+      clip.pcm.length === 0 ||
+      (this.prepared?.clip === clip && this.prepared.pauseAfter === pauseAfter)
+    ) {
       return;
     }
 
     this.clearPrepared();
 
-    const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
-    const blob = new Blob([wav], { type: "audio/wav" });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    const { audio, url } = createClipAudio(clip, pauseAfter);
 
     audio.preload = "auto";
     audio.preservesPitch = true;
     audio.playbackRate = rate;
     audio.load();
 
-    this.prepared = { audio, clip, url };
+    this.prepared = { audio, clip, pauseAfter, url };
   }
 
   async play(
     clip: KokoroAudio,
     rate: number,
     onEnded: () => void,
+    pauseAfter = 0,
   ): Promise<void> {
     this.stopCurrent();
 
@@ -98,16 +117,15 @@ export class WebAudioPlayer {
     let audio: HTMLAudioElement;
     let url: string;
 
-    if (this.prepared?.clip === clip) {
+    if (
+      this.prepared?.clip === clip &&
+      this.prepared.pauseAfter === pauseAfter
+    ) {
       audio = this.prepared.audio;
       url = this.prepared.url;
       this.prepared = null;
     } else {
-      const wav = encodeWavFromPcm(clip.pcm, clip.sampleRate);
-      const blob = new Blob([wav], { type: "audio/wav" });
-
-      url = URL.createObjectURL(blob);
-      audio = new Audio(url);
+      ({ audio, url } = createClipAudio(clip, pauseAfter));
     }
 
     this.objectUrl = url;

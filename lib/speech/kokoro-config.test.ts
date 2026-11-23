@@ -1,57 +1,60 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  resolveKokoroTargets,
-  splitForFastStart,
-  trimSilence,
-} from "@/lib/speech/kokoro-config";
+import { resolveKokoroPlan, trimSilence } from "@/lib/speech/kokoro-config";
 
-describe("resolveKokoroTargets", () => {
-  it("prefers multi-threaded q8 WASM (~92 MB, clean audio, no shader compile) in fast-load mode", () => {
+describe("resolveKokoroPlan", () => {
+  const FULL_ON_GPU = { device: "webgpu", dtype: "fp32" };
+  const SMALL_ON_CPU = { device: "wasm", dtype: "q8" };
+
+  it("uses WebGPU straight away once the full model is cached", () => {
     expect(
-      resolveKokoroTargets({
+      resolveKokoroPlan({
         crossOriginIsolated: true,
+        fullModelCached: true,
         hasWebGPU: true,
-        mode: "fast-load",
       }),
-    ).toEqual([
-      { device: "wasm", dtype: "q8" },
-      { device: "webgpu", dtype: "fp32" },
-    ]);
+    ).toEqual({ targets: [FULL_ON_GPU, SMALL_ON_CPU], upgrade: null });
   });
 
-  it("prefers WebGPU fp32 when webgpu mode is explicitly chosen", () => {
+  it("speaks on the small CPU model on a first visit, then upgrades to WebGPU", () => {
     expect(
-      resolveKokoroTargets({
+      resolveKokoroPlan({
         crossOriginIsolated: true,
+        fullModelCached: false,
         hasWebGPU: true,
-        mode: "webgpu",
       }),
-    ).toEqual([
-      { device: "webgpu", dtype: "fp32" },
-      { device: "wasm", dtype: "q8" },
-    ]);
+    ).toEqual({ targets: [SMALL_ON_CPU, FULL_ON_GPU], upgrade: FULL_ON_GPU });
   });
 
-  it("uses only q8 WASM when WebGPU is absent", () => {
+  it("loads WebGPU first when the CPU would run single-threaded", () => {
     expect(
-      resolveKokoroTargets({
+      resolveKokoroPlan({
+        crossOriginIsolated: false,
+        fullModelCached: false,
+        hasWebGPU: true,
+      }),
+    ).toEqual({ targets: [FULL_ON_GPU, SMALL_ON_CPU], upgrade: null });
+  });
+
+  it("uses only the small CPU model without WebGPU", () => {
+    expect(
+      resolveKokoroPlan({
         crossOriginIsolated: true,
+        fullModelCached: false,
         hasWebGPU: false,
       }),
-    ).toEqual([{ device: "wasm", dtype: "q8" }]);
+    ).toEqual({ targets: [SMALL_ON_CPU], upgrade: null });
   });
 
-  it("uses WebGPU fp32 then q8 WASM when crossOriginIsolated is unavailable", () => {
+  it("keeps to the small CPU model in Data saver, even with WebGPU cached", () => {
     expect(
-      resolveKokoroTargets({
-        crossOriginIsolated: false,
+      resolveKokoroPlan({
+        crossOriginIsolated: true,
+        fullModelCached: true,
         hasWebGPU: true,
+        mode: "data-saver",
       }),
-    ).toEqual([
-      { device: "webgpu", dtype: "fp32" },
-      { device: "wasm", dtype: "q8" },
-    ]);
+    ).toEqual({ targets: [SMALL_ON_CPU], upgrade: null });
   });
 });
 
@@ -77,35 +80,5 @@ describe("trimSilence", () => {
     const silent = new Float32Array(200);
 
     expect(trimSilence(silent, 1000)).toBe(silent);
-  });
-});
-
-describe("splitForFastStart", () => {
-  it("keeps short passages intact", () => {
-    expect(splitForFastStart("Short intro. Second line.")).toEqual([
-      "Short intro. Second line.",
-    ]);
-  });
-
-  it("keeps single long sentences intact", () => {
-    const single = "word ".repeat(30).trim() + ".";
-
-    expect(splitForFastStart(single)).toEqual([single]);
-  });
-
-  it("splits off a short leading sentence from a multi-sentence passage", () => {
-    const passage =
-      "This opens fast. The second sentence adds plenty of detail so the full chunk exceeds the fast-start threshold easily. And a third sentence closes it.";
-
-    expect(splitForFastStart(passage)).toEqual([
-      "This opens fast.",
-      "The second sentence adds plenty of detail so the full chunk exceeds the fast-start threshold easily. And a third sentence closes it.",
-    ]);
-  });
-
-  it("does not split when the leading sentence is already long", () => {
-    const longLead = `${"word ".repeat(32).trim()}. Short tail.`;
-
-    expect(splitForFastStart(longLead)).toEqual([longLead]);
   });
 });

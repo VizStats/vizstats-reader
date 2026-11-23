@@ -171,6 +171,7 @@ export function MarkdownReader() {
 
   useReadAloudShortcuts({
     activeTabId: activeTab.id,
+    breaks: activeModel.readAloudBreaks,
     chunks: activeModel.readAloudChunks,
     reader,
     script: readAloudScript,
@@ -533,6 +534,7 @@ export function MarkdownReader() {
             <div className="flex items-center gap-1.5 px-2.5 py-2 sm:px-3">
               <ReadAloudToolbar
                 activeTabId={activeTab.id}
+                breaks={activeModel.readAloudBreaks}
                 chunks={activeModel.readAloudChunks}
                 script={readAloudScript}
                 className="hidden min-w-0 flex-1 sm:flex"
@@ -659,6 +661,7 @@ export function MarkdownReader() {
           {file ? (
             <ReadAloudToolbar
               activeTabId={activeTab.id}
+              breaks={activeModel.readAloudBreaks}
               chunks={activeModel.readAloudChunks}
               script={readAloudScript}
               className="flex min-w-0 rounded-none border-x-0 border-b-0 px-2 sm:hidden"

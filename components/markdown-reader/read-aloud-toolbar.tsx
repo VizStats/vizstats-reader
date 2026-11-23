@@ -27,11 +27,12 @@ import {
   type ReadAloudScript,
   type ReadAloudStatus,
 } from "@/hooks/use-read-aloud";
-import type { SpeechSection } from "@/lib/markdown/speech";
+import type { PassageBreak, SpeechSection } from "@/lib/markdown/speech";
 import { cn } from "@/lib/utils";
 
 export function ReadAloudToolbar({
   reader,
+  breaks,
   chunks,
   sections,
   activeTabId,
@@ -41,6 +42,8 @@ export function ReadAloudToolbar({
   script,
 }: {
   reader: ReadAloudController;
+  // Per passage: the pause that follows it.
+  breaks: PassageBreak[];
   chunks: string[];
   sections: SpeechSection[];
   activeTabId: string;
@@ -146,7 +149,7 @@ export function ReadAloudToolbar({
     if (canSeek) {
       reader.seek(chunkIndex);
     } else if (canRead) {
-      reader.start(chunks, activeTabId, chunkIndex, script);
+      reader.start(chunks, activeTabId, chunkIndex, script, breaks);
     }
   }
 
@@ -211,7 +214,12 @@ export function ReadAloudToolbar({
                   : isPaused
                     ? reader.resume
                     : () =>
-                        reader.startFromSelection(chunks, activeTabId, script)
+                        reader.startFromSelection(
+                          chunks,
+                          activeTabId,
+                          script,
+                          breaks,
+                        )
               }
               size="icon-sm"
               type="button"

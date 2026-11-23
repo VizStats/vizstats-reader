@@ -15,6 +15,7 @@ import { parseMarkdown } from "@/lib/markdown/parse";
 import {
   getReadableSpeech,
   type ChunkSpeaker,
+  type PassageBreak,
   type SpeechSection,
 } from "@/lib/markdown/speech";
 import { getDocumentStats } from "@/lib/markdown/stats";
@@ -33,6 +34,8 @@ export type ReaderTabModel = {
   castGenders: Record<string, CharacterGender>;
   headings: HeadingBlock[];
   outlineActiveHeadingId: null | string;
+  // Per passage: the pause that follows it.
+  readAloudBreaks: PassageBreak[];
   readAloudChunks: string[];
   readAloudChunkLines: number[];
   // Screenplays only: per passage, the line its flag goes on and whether it
@@ -85,6 +88,7 @@ export function useReaderTabModel(
     };
   }, [content, isScreenplay, tableRead]);
   const {
+    chunkBreaks: readAloudBreaks,
     chunkLines: readAloudChunkLines,
     chunkSpeakers: readAloudSpeakers,
     chunks: readAloudChunks,
@@ -140,6 +144,7 @@ export function useReaderTabModel(
     castGenders,
     headings,
     outlineActiveHeadingId,
+    readAloudBreaks,
     readAloudChunks,
     readAloudChunkLines,
     readAloudFlagLines,

@@ -49,7 +49,7 @@ describe("parseMarkdown", () => {
     expect(blocks).toEqual([
       {
         sourceLine: 1,
-        text: "Read the docs at our site using pnpm .",
+        text: "Read the docs at our site using pnpm.",
         type: "paragraph",
       },
     ]);

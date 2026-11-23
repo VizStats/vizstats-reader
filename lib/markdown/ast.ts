@@ -74,12 +74,37 @@ export function getMarkdownNodeText(node: MarkdownAstNode | undefined): string {
   }
 }
 
+// Pieces of one line of text: they join as written, so "[a link](…)," reads
+// "a link," with no space before the comma. Anything else (paragraphs in a
+// quote, cells in a row, raw HTML) is separated by a space.
+const INLINE_NODE_TYPES = new Set([
+  "break",
+  "delete",
+  "emphasis",
+  "footnoteReference",
+  "image",
+  "imageReference",
+  "inlineCode",
+  "link",
+  "linkReference",
+  "strong",
+  "text",
+]);
+
 export function getMarkdownNodesText(nodes: MarkdownAstNode[] = []): string {
-  return nodes
-    .map((node) => getMarkdownNodeText(node))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  let text = "";
+  let previousInline = false;
+
+  for (const node of nodes) {
+    const inline = INLINE_NODE_TYPES.has(node.type);
+
+    text +=
+      (text && !(inline && previousInline) ? " " : "") +
+      getMarkdownNodeText(node);
+    previousInline = inline;
+  }
+
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function getHtmlPlainText(html: string) {

@@ -5,65 +5,69 @@ import type {
 
 export type KokoroCapabilities = {
   crossOriginIsolated: boolean;
+  // Whether the full fp32 model is already in the browser's model cache.
+  fullModelCached: boolean;
   hasWebGPU: boolean;
   mode?: KokoroPerformanceMode;
 };
 
-// Minimum passage length before splitting off the leading sentence for fast
-// first-audio startup. Short passages already synthesize quickly in one call.
-const FAST_START_MIN_LENGTH = 90;
-const FAST_START_MAX_LEAD = 140;
+export type KokoroLoadPlan = {
+  // Tried in order; the first that loads is the one that speaks.
+  targets: KokoroTarget[];
+  // Loaded in the background once the first target is speaking, then swapped
+  // in for the passages that follow.
+  upgrade: KokoroTarget | null;
+};
+
+const FULL_ON_GPU: KokoroTarget = { device: "webgpu", dtype: "fp32" };
+const SMALL_ON_CPU: KokoroTarget = { device: "wasm", dtype: "q8" };
 
 const SILENCE_THRESHOLD = 0.004;
 const LEAD_PAD_SECONDS = 0.02;
 const TRAIL_PAD_SECONDS = 0.04;
 const EDGE_FADE_SECONDS = 0.005;
 
+// The silence trimSilence leaves at a clip's edges, which counts toward the
+// pause between passages.
+export const TRIMMED_EDGE_SECONDS = LEAD_PAD_SECONDS + TRAIL_PAD_SECONDS;
+
 /**
- * Returns an ordered fallback chain of Kokoro (device, dtype) targets.
+ * Chooses how the natural voice loads.
  *
- * Kokoro-82M's ISTFTNet vocoder produces cracked audio in `fp16` on WebGPU, so
- * only the two clean configurations are used:
- * - Multi-threaded `q8` on WASM (~92 MB): fast initial load, clean voice
- *   fidelity, and no multi-second WebGPU shader compilation delay.
- * - `fp32` on WebGPU (~326 MB): slower first load, fastest per-paragraph
- *   synthesis for long documents when `mode === "webgpu"`.
+ * The full fp32 model on WebGPU (~326 MB) generates speech several times
+ * faster than it plays; the 92 MB q8 model on the CPU barely keeps up even
+ * multi-threaded, and falls behind single-threaded, so long reads pause.
+ * Kokoro's vocoder cracks in fp16, so fp16 is never used.
+ *
+ * - WebGPU with the full model cached: WebGPU straight away.
+ * - WebGPU on a first visit with cross-origin isolation (multi-threaded CPU):
+ *   speak on the small model while the full one downloads, then switch.
+ * - WebGPU on a first visit without isolation: the single-threaded CPU is too
+ *   slow to listen to, so load the full model first.
+ * - No WebGPU, or Data saver: the small CPU model only.
  */
-export function resolveKokoroTargets({
+export function resolveKokoroPlan({
   crossOriginIsolated,
+  fullModelCached,
   hasWebGPU,
-  mode = "fast-load",
-}: KokoroCapabilities): KokoroTarget[] {
-  if (mode === "webgpu" && hasWebGPU) {
-    return [
-      { device: "webgpu", dtype: "fp32" },
-      { device: "wasm", dtype: "q8" },
-    ];
+  mode = "auto",
+}: KokoroCapabilities): KokoroLoadPlan {
+  if (mode === "data-saver" || !hasWebGPU) {
+    return { targets: [SMALL_ON_CPU], upgrade: null };
   }
 
-  if (crossOriginIsolated) {
-    return hasWebGPU
-      ? [
-          { device: "wasm", dtype: "q8" },
-          { device: "webgpu", dtype: "fp32" },
-        ]
-      : [{ device: "wasm", dtype: "q8" }];
+  if (fullModelCached || !crossOriginIsolated) {
+    return { targets: [FULL_ON_GPU, SMALL_ON_CPU], upgrade: null };
   }
 
-  if (hasWebGPU) {
-    return [
-      { device: "webgpu", dtype: "fp32" },
-      { device: "wasm", dtype: "q8" },
-    ];
-  }
-
-  return [{ device: "wasm", dtype: "q8" }];
+  return { targets: [SMALL_ON_CPU, FULL_ON_GPU], upgrade: FULL_ON_GPU };
 }
 
 /**
- * Trims Kokoro's baked-in leading and trailing silence from a synthesized
- * waveform, keeping a short natural breath margin and micro-fade so adjacent
- * passages flow without half-second dead gaps or edge clicks.
+ * Trims Kokoro's baked-in leading and trailing silence (about 0.3 s and 0.5 s)
+ * so the reader sets the pause between passages itself, keeping a short margin
+ * and a micro-fade against edge clicks. Pauses inside a passage are Kokoro's
+ * own and are left alone.
  */
 export function trimSilence(
   samples: Float32Array,
@@ -117,34 +121,4 @@ export function trimSilence(
   }
 
   return trimmed;
-}
-
-/**
- * Splits a multi-sentence passage into a short leading sentence and its
- * remainder so the play head starts speaking faster while the tail synthesizes.
- *
- * Returns a single-element array when the passage is already short or has no
- * clean early sentence break. Does not alter passage indexing or highlights.
- */
-export function splitForFastStart(text: string): string[] {
-  const trimmed = text.trim();
-
-  if (trimmed.length < FAST_START_MIN_LENGTH) {
-    return trimmed ? [trimmed] : [];
-  }
-
-  const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
-
-  if (!sentences || sentences.length < 2) {
-    return [trimmed];
-  }
-
-  const first = sentences[0]?.trim() ?? "";
-  const rest = sentences.slice(1).join(" ").replace(/\s+/g, " ").trim();
-
-  if (!first || !rest || first.length > FAST_START_MAX_LEAD) {
-    return [trimmed];
-  }
-
-  return [first, rest];
 }

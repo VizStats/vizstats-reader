@@ -50,12 +50,18 @@ export type KokoroDevice = "webgpu" | "wasm";
 
 export type KokoroDtype = "fp32" | "q8";
 
-export type KokoroPerformanceMode = "fast-load" | "webgpu";
+// "auto" picks the fastest runtime the browser has; "data-saver" keeps to the
+// 92 MB CPU model.
+export type KokoroPerformanceMode = "auto" | "data-saver";
 
 export type KokoroTarget = {
   device: KokoroDevice;
   dtype: KokoroDtype;
 };
+
+// The runtime speaking now, and whether a faster one is still loading behind
+// it.
+export type KokoroRuntime = KokoroTarget & { upgrading: boolean };
 
 export type KokoroAudio = {
   pcm: Float32Array;
@@ -69,7 +75,12 @@ export type KokoroWorkerRequest =
 
 export type KokoroWorkerResponse =
   | { type: "progress"; progress: number }
-  | { type: "ready"; device: KokoroDevice; dtype: KokoroDtype }
+  | {
+      type: "ready";
+      device: KokoroDevice;
+      dtype: KokoroDtype;
+      upgrading: boolean;
+    }
   | { type: "init-error"; error: string }
   | { type: "result"; id: number; pcm: Float32Array; sampleRate: number }
   | { type: "generate-error"; id: number; error: string };

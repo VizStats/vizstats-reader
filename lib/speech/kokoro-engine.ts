@@ -5,7 +5,7 @@ import {
 import type {
   KokoroAudio,
   KokoroPerformanceMode,
-  KokoroTarget,
+  KokoroRuntime,
   KokoroVoiceId,
   KokoroWorkerResponse,
 } from "@/lib/speech/kokoro-messages";
@@ -42,8 +42,8 @@ class KokoroEngine {
 
   state: KokoroEngineState = "idle";
   progress = 0;
-  runtime: KokoroTarget | null = null;
-  mode: KokoroPerformanceMode = "fast-load";
+  runtime: KokoroRuntime | null = null;
+  mode: KokoroPerformanceMode = "auto";
 
   constructor() {
     this.queue = new KokoroPriorityQueue((job) => this.runWorkerJob(job));
@@ -225,7 +225,11 @@ class KokoroEngine {
       }
       case "ready": {
         this.state = "ready";
-        this.runtime = { device: response.device, dtype: response.dtype };
+        this.runtime = {
+          device: response.device,
+          dtype: response.dtype,
+          upgrading: response.upgrading,
+        };
         this.notifyProgress(1);
         this.resolveReady?.();
         this.resolveReady = null;

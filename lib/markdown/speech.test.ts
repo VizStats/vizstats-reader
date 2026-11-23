@@ -124,7 +124,7 @@ describe("getReadableSpeech", () => {
   });
 
   it("splits long text into chunks of roughly 220 characters at sentence ends", () => {
-    const sentence = `${"word ".repeat(30).trim()}.`;
+    const sentence = `Word ${"word ".repeat(29).trim()}.`;
     const { chunkLines, chunks } = getReadableSpeech([
       paragraph(`${sentence} ${sentence} ${sentence}`, 7),
     ]);
@@ -159,6 +159,12 @@ describe("toPlainSpeechText", () => {
 
   it("returns an empty string for markup-only input", () => {
     expect(toPlainSpeechText(" **_~~ ")).toBe("");
+  });
+
+  it("keeps underscores and asterisks inside words", () => {
+    expect(toPlainSpeechText("Run clean_ports.py on the snake_case files.")).toBe(
+      "Run clean_ports.py on the snake_case files.",
+    );
   });
 });
 
@@ -223,5 +229,64 @@ describe("getSelectedChunkIndex with a remembered selection", () => {
 
     vi.advanceTimersByTime(11_000);
     expect(getSelectedChunkIndex(chunks)).toBeNull();
+  });
+});
+
+describe("chunk breaks", () => {
+  it("pauses by what follows: the same paragraph, another block, or a heading", () => {
+    const longParagraph = `${"A sentence that keeps going for a while.".repeat(4)} ${"Another one follows it here.".repeat(4)}`;
+    const { chunkBreaks, chunks } = getReadableSpeech([
+      heading("Intro", 1, 1),
+      paragraph(longParagraph, 3),
+      paragraph("Short.", 5),
+      {
+        itemLines: [7, 8],
+        items: ["Alpha", "Beta"],
+        ordered: false,
+        sourceLine: 7,
+        type: "list",
+      },
+      heading("Next", 2, 10),
+      paragraph("End.", 12),
+    ]);
+
+    // The long paragraph splits into two passages that share its line.
+    expect(chunks).toHaveLength(8);
+    expect(chunkBreaks).toEqual([
+      "section", // heading → paragraph
+      "sentence", // within the long paragraph
+      "block", // long paragraph → short paragraph
+      "block", // paragraph → list
+      "block", // item → item
+      "section", // list → heading
+      "section", // heading → paragraph
+      "block", // last passage
+    ]);
+  });
+});
+
+describe("passages from report prose", () => {
+  it("still breaks a very long run at its full stops when sentences start in lower case", () => {
+    const fragment = `${"word ".repeat(20).trim()}.`;
+    const run = Array.from({ length: 8 }, () => fragment).join(" ");
+    const chunks = getReadableChunks([paragraph(run)]);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= 220)).toBe(true);
+    expect(chunks.join(" ")).toBe(run);
+  });
+
+  it("never splits a passage inside a number, an abbreviation or a quote", () => {
+    const { chunks } = getReadableSpeech([
+      paragraph(
+        'Lending to port projects reached $3.5 billion in 2025, up 12.4% on the year before. Most of it went to three terminals on the west coast. Dr. Okafor, who led the review, called it "the most important single project of the decade." Repayments start in 2027.',
+      ),
+    ]);
+
+    expect(chunks.join(" ")).toContain("$3.5 billion");
+    expect(chunks.join(" ")).toContain("12.4%");
+    expect(chunks.join(" ")).toContain("Dr. Okafor");
+    expect(chunks.join(" ")).toContain('decade." Repayments');
+    expect(chunks.every((chunk) => !/\d\. \d/.test(chunk))).toBe(true);
   });
 });

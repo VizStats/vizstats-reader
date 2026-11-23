@@ -1,7 +1,7 @@
 import { KokoroTTS } from "kokoro-js";
 
 import {
-  resolveKokoroTargets,
+  resolveKokoroPlan,
   trimSilence,
 } from "@/lib/speech/kokoro-config";
 import type {
@@ -15,13 +15,13 @@ import type {
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const VOICE_CACHE_NAME = "kokoro-voices";
 const VOICE_BASE_URL = `https://huggingface.co/${MODEL_ID}/resolve/main/voices`;
-
-type WebGPUAdapter = {
-  features?: { has(feature: string): boolean };
-};
+// transformers.js keeps downloaded model files in Cache Storage under this
+// name, keyed by their Hub URL. The fp32 weights are `onnx/model.onnx`.
+const MODEL_CACHE_NAME = "transformers-cache";
+const FULL_MODEL_URL = `https://huggingface.co/${MODEL_ID}/resolve/main/onnx/model.onnx`;
 
 type WebGPUNavigator = {
-  gpu?: { requestAdapter(): Promise<WebGPUAdapter | null> };
+  gpu?: { requestAdapter(): Promise<unknown> };
 };
 
 const scope = self as unknown as {
@@ -34,28 +34,40 @@ const scope = self as unknown as {
 };
 
 let ttsPromise: Promise<KokoroTTS> | null = null;
-let loadedMode: KokoroPerformanceMode = "fast-load";
+let loadedMode: KokoroPerformanceMode = "auto";
+// The model that speaks. A background upgrade replaces it; the one it replaces
+// is released once no passage is still being generated on it.
+let activeTts: KokoroTTS | null = null;
+let retiredTts: KokoroTTS | null = null;
+let generating = 0;
 const prefetchedVoices = new Set<KokoroVoiceId>();
 
-async function detectTargets(
-  mode: KokoroPerformanceMode,
-): Promise<KokoroTarget[]> {
+async function hasWebGPUAdapter() {
   const gpu = (navigator as unknown as WebGPUNavigator).gpu;
-  let hasWebGPU = false;
 
-  if (gpu) {
-    try {
-      hasWebGPU = Boolean(await gpu.requestAdapter());
-    } catch {
-      hasWebGPU = false;
-    }
+  if (!gpu) {
+    return false;
   }
 
-  return resolveKokoroTargets({
-    crossOriginIsolated: Boolean(scope.crossOriginIsolated),
-    hasWebGPU,
-    mode,
-  });
+  try {
+    return Boolean(await gpu.requestAdapter());
+  } catch {
+    return false;
+  }
+}
+
+async function isFullModelCached() {
+  if (typeof caches === "undefined") {
+    return false;
+  }
+
+  try {
+    const cache = await caches.open(MODEL_CACHE_NAME);
+
+    return Boolean(await cache.match(FULL_MODEL_URL));
+  } catch {
+    return false;
+  }
 }
 
 async function prefetchVoices(voices: KokoroVoiceId[]) {
@@ -104,49 +116,106 @@ async function prefetchVoices(voices: KokoroVoiceId[]) {
   );
 }
 
+function postProgress(fileProgress: Map<string, { loaded: number; total: number }>) {
+  let loaded = 0;
+  let total = 0;
+
+  for (const file of fileProgress.values()) {
+    loaded += file.loaded;
+    total += file.total;
+  }
+
+  scope.postMessage({
+    type: "progress",
+    progress: total > 0 ? loaded / total : 0,
+  });
+}
+
+function loadTarget(target: KokoroTarget, reportProgress: boolean) {
+  const fileProgress = new Map<string, { loaded: number; total: number }>();
+
+  return KokoroTTS.from_pretrained(MODEL_ID, {
+    dtype: target.dtype,
+    device: target.device,
+    progress_callback: reportProgress
+      ? (info) => {
+          if (info.status !== "progress") {
+            return;
+          }
+
+          fileProgress.set(info.file, {
+            loaded: info.loaded ?? 0,
+            total: info.total ?? 0,
+          });
+          postProgress(fileProgress);
+        }
+      : undefined,
+  });
+}
+
+function sameTarget(a: KokoroTarget, b: KokoroTarget) {
+  return a.device === b.device && a.dtype === b.dtype;
+}
+
+function releaseRetired() {
+  if (!retiredTts || generating > 0) {
+    return;
+  }
+
+  const retired = retiredTts;
+
+  retiredTts = null;
+  void retired.model.dispose().catch(() => undefined);
+}
+
+// Loads the faster runtime while the first one keeps speaking, then swaps it
+// in. On failure the first runtime simply carries on.
+async function upgradeTo(target: KokoroTarget, current: KokoroTarget) {
+  try {
+    const tts = await loadTarget(target, false);
+
+    retiredTts = activeTts;
+    activeTts = tts;
+    scope.postMessage({ type: "ready", ...target, upgrading: false });
+    releaseRetired();
+  } catch {
+    scope.postMessage({ type: "ready", ...current, upgrading: false });
+  }
+}
+
 function loadModel(mode: KokoroPerformanceMode = loadedMode) {
   loadedMode = mode;
   ttsPromise ??= (async () => {
-    const targets = await detectTargets(mode);
+    const [hasWebGPU, fullModelCached] = await Promise.all([
+      hasWebGPUAdapter(),
+      isFullModelCached(),
+    ]);
+    const plan = resolveKokoroPlan({
+      crossOriginIsolated: Boolean(scope.crossOriginIsolated),
+      fullModelCached,
+      hasWebGPU,
+      mode,
+    });
     let lastError: unknown;
 
-    for (const target of targets) {
-      const fileProgress = new Map<string, { loaded: number; total: number }>();
-
+    for (const target of plan.targets) {
       try {
-        const tts = await KokoroTTS.from_pretrained(MODEL_ID, {
-          dtype: target.dtype,
-          device: target.device,
-          progress_callback: (info) => {
-            if (info.status !== "progress") {
-              return;
-            }
+        const tts = await loadTarget(target, true);
+        const upgrade =
+          plan.upgrade && !sameTarget(plan.upgrade, target)
+            ? plan.upgrade
+            : null;
 
-            fileProgress.set(info.file, {
-              loaded: info.loaded ?? 0,
-              total: info.total ?? 0,
-            });
-
-            let loaded = 0;
-            let total = 0;
-
-            for (const file of fileProgress.values()) {
-              loaded += file.loaded;
-              total += file.total;
-            }
-
-            scope.postMessage({
-              type: "progress",
-              progress: total > 0 ? loaded / total : 0,
-            });
-          },
-        });
-
+        activeTts = tts;
         scope.postMessage({
           type: "ready",
-          device: target.device,
-          dtype: target.dtype,
+          ...target,
+          upgrading: Boolean(upgrade),
         });
+
+        if (upgrade) {
+          void upgradeTo(upgrade, target);
+        }
 
         return tts;
       } catch (error) {
@@ -181,8 +250,11 @@ async function handleRequest(request: KokoroWorkerRequest) {
     return;
   }
 
+  generating += 1;
+
   try {
-    const tts = await loadModel();
+    const loaded = await loadModel();
+    const tts = activeTts ?? loaded;
     const audio = await tts.generate(request.text, { voice: request.voice });
     const trimmed = trimSilence(audio.audio, audio.sampling_rate);
     const pcm =
@@ -201,6 +273,9 @@ async function handleRequest(request: KokoroWorkerRequest) {
       id: request.id,
       error: toErrorMessage(error),
     });
+  } finally {
+    generating -= 1;
+    releaseRetired();
   }
 }
 

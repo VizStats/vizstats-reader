@@ -60,13 +60,15 @@ describe("getMarkdownNodeText", () => {
     const paragraph: MarkdownAstNode = {
       children: [
         { children: [textNode("bold")], type: "strong" },
-        textNode("and"),
+        // Markdown keeps the spaces between inline pieces in the text nodes.
+        textNode(" and "),
         { children: [textNode("linked")], type: "link", url: "https://x" },
+        textNode("."),
       ],
       type: "paragraph",
     };
 
-    expect(getMarkdownNodeText(paragraph)).toBe("bold and linked");
+    expect(getMarkdownNodeText(paragraph)).toBe("bold and linked.");
   });
 
   it("strips tags and decodes entities in raw HTML nodes", () => {

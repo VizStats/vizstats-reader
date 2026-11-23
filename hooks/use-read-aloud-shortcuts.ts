@@ -7,14 +7,17 @@ import type {
   ReadAloudScript,
 } from "@/hooks/use-read-aloud";
 import { isEditablePasteTarget } from "@/lib/markdown/document";
+import type { PassageBreak } from "@/lib/markdown/speech";
 
 export function useReadAloudShortcuts({
   activeTabId,
+  breaks,
   chunks,
   reader,
   script,
 }: {
   activeTabId: string;
+  breaks: PassageBreak[];
   chunks: string[];
   reader: ReadAloudController;
   script?: ReadAloudScript;
@@ -74,7 +77,7 @@ export function useReadAloudShortcuts({
           reader.resume();
         } else if (reader.status === "idle" && chunks.length > 0) {
           event.preventDefault();
-          reader.startFromSelection(chunks, activeTabId, script);
+          reader.startFromSelection(chunks, activeTabId, script, breaks);
         }
       }
     }
@@ -82,7 +85,7 @@ export function useReadAloudShortcuts({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeTabId, chunks, reader, script]);
+  }, [activeTabId, breaks, chunks, reader, script]);
 }
 
 function isReadAloudShortcutTarget(target: EventTarget | null) {

@@ -1,5 +1,12 @@
 const SPOKEN_PREFIX = /^(?:Item\s+\d+|Quote)\.\s+/i;
 
+// Intl.Segmenter ends a sentence at any full stop followed by a capital. These
+// rarely end one: a title before a name ("Dr. Okafor"), and a lone capital
+// initial ("J. Smith", the last letter of "U.S. Treasury").
+const TITLE_BEFORE_NAME =
+  /(?:^|\s)(?:Mr|Mrs|Ms|Mx|Dr|Prof|St|Mt|Gen|Sen|Rep|Gov|Lt|Col|Capt|Sgt|Rev|Hon|vs)\.$/i;
+const CAPITAL_INITIAL = /(?:^|[\s.])\p{Lu}\.$/u;
+
 type SegmenterLike = {
   segment(input: string): Iterable<{ segment: string }>;
 };
@@ -58,6 +65,16 @@ export function splitIntoSentences(text: string): string[] {
     ) {
       merged.push(`${part} ${nonEmpty[i + 1]!}`);
       i += 1;
+      continue;
+    }
+
+    const previous = merged.at(-1);
+
+    if (
+      previous !== undefined &&
+      (TITLE_BEFORE_NAME.test(previous) || CAPITAL_INITIAL.test(previous))
+    ) {
+      merged[merged.length - 1] = `${previous} ${part}`;
       continue;
     }
 
@@ -195,7 +212,15 @@ export function createSentenceRange(
 
       const ownerLine = parent.closest("[data-source-line]");
 
-      if (ownerLine && ownerLine !== target) {
+      // Text inside a nested element on another line (a child list item)
+      // belongs to that element. Nested elements on the same line (a
+      // blockquote's paragraph) are part of this one.
+      if (
+        ownerLine &&
+        ownerLine !== target &&
+        ownerLine.getAttribute("data-source-line") !==
+          target.getAttribute("data-source-line")
+      ) {
         return NodeFilter.FILTER_REJECT;
       }
 
