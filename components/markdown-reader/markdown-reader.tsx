@@ -4,13 +4,10 @@ import { useCallback, useMemo, useState, type ClipboardEvent } from "react";
 import {
   BookOpen,
   Braces,
-  ClipboardPaste,
   Columns2,
-  Download,
   FileSearch,
   LoaderCircle,
   PanelRightClose,
-  Printer,
   Upload,
 } from "lucide-react";
 
@@ -21,6 +18,7 @@ import { ReaderTabs } from "@/components/markdown-reader/reader-tabs";
 import { ScreenplayPrint } from "@/components/markdown-reader/screenplay-preview";
 import {
   CopySourceButton,
+  DocumentActionsMenu,
   EditPreviewButton,
 } from "@/components/markdown-reader/reader-view-controls";
 import {
@@ -561,63 +559,6 @@ export function MarkdownReader() {
                 </Button>
               ) : null}
 
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Button
-                  aria-label="Open a Markdown, Mermaid, Fountain, or PDF document"
-                  onClick={openFilePicker}
-                  size="icon"
-                  title="Open file"
-                  type="button"
-                  variant="secondary"
-                >
-                  <Upload aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label="Paste Markdown"
-                  onClick={() => setIsPasteDialogOpen(true)}
-                  size="icon"
-                  title="Paste markdown"
-                  type="button"
-                  variant="secondary"
-                >
-                  <ClipboardPaste aria-hidden="true" />
-                </Button>
-                <Button
-                  aria-label={
-                    file.kind === "pdf"
-                      ? "Export extracted PDF text as Markdown"
-                      : file.kind === "screenplay"
-                        ? "Download this Fountain screenplay"
-                        : "Download this Markdown file"
-                  }
-                  onClick={downloadDocument}
-                  size="icon"
-                  title={
-                    file.kind === "pdf"
-                      ? "Export extracted text as .md"
-                      : file.kind === "screenplay"
-                        ? "Download .fountain"
-                        : "Download .md"
-                  }
-                  type="button"
-                  variant="secondary"
-                >
-                  <Download aria-hidden="true" />
-                </Button>
-                {file.kind === "screenplay" ? (
-                  <Button
-                    aria-label="Print or save as PDF"
-                    onClick={() => window.print()}
-                    size="icon"
-                    title="Print or save as PDF"
-                    type="button"
-                    variant="secondary"
-                  >
-                    <Printer aria-hidden="true" />
-                  </Button>
-                ) : null}
-              </div>
-
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-1.5",
@@ -642,18 +583,31 @@ export function MarkdownReader() {
                   )}
                 </TabsList>
 
-                {!splitTab && file.kind !== "pdf" ? (
-                  documentView === "preview" ? (
-                    <EditPreviewButton
-                      isEditing={editingTabIds.has(activeTab.id)}
-                      onEditingChange={(isEditing) =>
-                        setTabEditing(activeTab.id, isEditing)
-                      }
-                    />
-                  ) : (
-                    <CopySourceButton content={file.content} />
-                  )
+                {!splitTab &&
+                file.kind !== "pdf" &&
+                documentView === "preview" ? (
+                  <EditPreviewButton
+                    isEditing={editingTabIds.has(activeTab.id)}
+                    onEditingChange={(isEditing) =>
+                      setTabEditing(activeTab.id, isEditing)
+                    }
+                  />
                 ) : null}
+              </div>
+
+              {/* Copy stays in reach in both Preview and Source, at the end
+                  of the bar so it never moves; the document actions used now
+                  and then sit in the menu after it. */}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!splitTab && file.kind !== "pdf" ? (
+                  <CopySourceButton content={file.content} />
+                ) : null}
+                <DocumentActionsMenu
+                  kind={file.kind}
+                  onDownload={downloadDocument}
+                  onOpenFile={openFilePicker}
+                  onPaste={() => setIsPasteDialogOpen(true)}
+                />
               </div>
             </div>
           ) : null}

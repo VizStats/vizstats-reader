@@ -1,11 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, PencilLine } from "lucide-react";
+import {
+  Check,
+  ClipboardPaste,
+  Copy,
+  Download,
+  EllipsisVertical,
+  PencilLine,
+  Printer,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { rememberReadableSelection } from "@/lib/markdown/speech";
+import type { LoadedFile } from "@/lib/markdown/types";
 
 export function EditPreviewButton({
   compact = false,
@@ -82,6 +99,67 @@ export function CopySourceButton({ content }: { content: string }) {
     >
       {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
     </Button>
+  );
+}
+
+// Document actions used now and then, kept behind one button so the toolbar
+// shows only what is used all the time.
+export function DocumentActionsMenu({
+  kind,
+  onDownload,
+  onOpenFile,
+  onPaste,
+}: {
+  kind: LoadedFile["kind"];
+  onDownload: () => void;
+  onOpenFile: () => void;
+  onPaste: () => void;
+}) {
+  const downloadLabel =
+    kind === "pdf"
+      ? "Export text as .md"
+      : kind === "screenplay"
+        ? "Download .fountain"
+        : "Download .md";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="More document actions"
+            className="shrink-0"
+            size="icon"
+            title="More"
+            type="button"
+            variant="secondary"
+          />
+        }
+      >
+        <EllipsisVertical aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-auto min-w-48">
+        <DropdownMenuItem onClick={onOpenFile}>
+          <Upload aria-hidden="true" />
+          Open file…
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onPaste}>
+          <ClipboardPaste aria-hidden="true" />
+          Paste Markdown…
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onDownload}>
+          <Download aria-hidden="true" />
+          {downloadLabel}
+        </DropdownMenuItem>
+        {kind === "screenplay" ? (
+          <DropdownMenuItem onClick={() => window.print()}>
+            <Printer aria-hidden="true" />
+            Print or save as PDF…
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
