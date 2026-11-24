@@ -20,6 +20,7 @@ import {
   CopySourceButton,
   DocumentActionsMenu,
   EditPreviewButton,
+  RemoveDocumentButton,
 } from "@/components/markdown-reader/reader-view-controls";
 import {
   SingleReaderView,
@@ -595,9 +596,9 @@ export function MarkdownReader() {
                 ) : null}
               </div>
 
-              {/* Copy stays in reach in both Preview and Source, at the end
-                  of the bar so it never moves; the document actions used now
-                  and then sit in the menu after it. */}
+              {/* Copy stays in reach in both Preview and Source, followed by
+                  the seldom-used actions menu and Remove document at the end
+                  of the bar so their positions never shift. */}
               <div className="flex shrink-0 items-center gap-1.5">
                 {!splitTab && file.kind !== "pdf" ? (
                   <CopySourceButton content={file.content} />
@@ -608,6 +609,7 @@ export function MarkdownReader() {
                   onOpenFile={openFilePicker}
                   onPaste={() => setIsPasteDialogOpen(true)}
                 />
+                <RemoveDocumentButton onRemove={resetReader} />
               </div>
             </div>
           ) : null}
@@ -670,7 +672,6 @@ export function MarkdownReader() {
                 isDragging={isDragging}
                 onChooseFile={openFilePicker}
                 onOpenPaste={() => setIsPasteDialogOpen(true)}
-                onReset={resetReader}
                 onSourceChange={editTabContent}
                 reader={reader}
                 updateTab={updateTab}
@@ -686,7 +687,6 @@ export function MarkdownReader() {
               isDragging={isDragging}
               onChooseFile={openFilePicker}
               onOpenPaste={() => setIsPasteDialogOpen(true)}
-              onReset={resetReader}
               onSourceChange={editTabContent}
               reader={reader}
               updateTab={updateTab}

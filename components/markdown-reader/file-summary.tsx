@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, FileText, FileX, PanelLeftClose } from "lucide-react";
+import { Clapperboard, FileText, PanelLeftClose } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -16,12 +16,10 @@ import type { DocumentStats, LoadedFile } from "@/lib/markdown/types";
 export function FileSummary({
   file,
   onCollapse,
-  onReset,
   stats,
 }: {
   file: LoadedFile;
   onCollapse: () => void;
-  onReset: () => void;
   stats: DocumentStats;
 }) {
   return (
@@ -104,25 +102,6 @@ export function FileSummary({
           </>
         )}
       </dl>
-
-      <Separator />
-
-      <div className="flex justify-end">
-        <Button
-          className="text-foreground"
-          onClick={onReset}
-          size="xs"
-          type="button"
-          variant="destructive"
-        >
-          <FileX
-            aria-hidden="true"
-            className="text-destructive"
-            data-icon="inline-start"
-          />
-          Remove document
-        </Button>
-      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   EllipsisVertical,
+  FileX,
   PencilLine,
   Printer,
   Upload,
@@ -160,6 +161,22 @@ export function DocumentActionsMenu({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export function RemoveDocumentButton({ onRemove }: { onRemove: () => void }) {
+  return (
+    <Button
+      aria-label="Remove document"
+      className="shrink-0"
+      onClick={onRemove}
+      size="icon"
+      title="Remove document"
+      type="button"
+      variant="destructive"
+    >
+      <FileX aria-hidden="true" />
+    </Button>
   );
 }
 

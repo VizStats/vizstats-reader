@@ -60,7 +60,6 @@ export function SingleReaderView({
   isDragging,
   onChooseFile,
   onOpenPaste,
-  onReset,
   onSourceChange,
   reader,
   updateTab,
@@ -73,7 +72,6 @@ export function SingleReaderView({
   isDragging: boolean;
   onChooseFile: () => void;
   onOpenPaste: () => void;
-  onReset: () => void;
   onSourceChange: (tabId: string, content: string) => void;
   reader: ReadAloudController;
   updateTab: UpdateReaderTab;
@@ -98,7 +96,6 @@ export function SingleReaderView({
               <FileSummary
                 file={file}
                 onCollapse={() => setIsSidebarOpen(false)}
-                onReset={onReset}
                 stats={activeModel.stats}
               />
             </div>
